@@ -60,8 +60,8 @@ Triple schema:
 
 ## Preference
 
-Labels the candidate answers and produces preference pairs.
+TBD: labels the candidate answers and produces preference pairs.
 
 ## Judge
 
-The actual model
+TBD: the actual model
