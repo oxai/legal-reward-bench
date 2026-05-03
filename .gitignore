@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+
+pipeline/01_dataset/outputs/triples/*
+pipeline/01_dataset/outputs/candidate_responses/*
+pipeline/02_preference/outputs/*
+pipeline/03_judge/data/*
+pipeline/03_judge/outputs/*
+
+!pipeline/01_dataset/outputs/triples/.gitkeep
+!pipeline/01_dataset/outputs/candidate_responses/.gitkeep
+!pipeline/02_preference/outputs/.gitkeep
+!pipeline/03_judge/data/.gitkeep
+!pipeline/03_judge/outputs/.gitkeep
