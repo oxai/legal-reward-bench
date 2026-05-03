@@ -1,5 +1,3 @@
-# AI for high-stakes: Legal Reward Modeling
-
 ## Setup
 
 Use `uv` to create and sync the local Python environment:
