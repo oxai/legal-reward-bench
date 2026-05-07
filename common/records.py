@@ -27,3 +27,15 @@ class CandidateResponse:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class ResponseLabel:
+    id: str
+    response_id: str
+    triple_id: str
+    labels: dict[str, Any]
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)

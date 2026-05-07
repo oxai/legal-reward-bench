@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answer_behavior"],
+  "properties": {
+    "answer_behavior": {
+      "type": "string",
+      "enum": ["attempted", "abstained", "unusable"]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+You are judging whether a model response actually answers a legal question or refuses to answer it.
+
+Classify only the response behavior. Do not evaluate correctness, grounding, or completeness.
+
+Return one JSON object that exactly follows the provided schema. Do not include markdown,
+comments, explanations, or extra keys.
+
+Choose exactly one:
+- "attempted": the response tries to answer the question.
+- "abstained": the response does not answer because it says the provided information is
+  insufficient, unavailable, or uncertain.
+- "unusable": the response is empty, unreadable, incoherent, malformed, or severely repetitive.
+
+Rules:
+- Do not judge whether the answer is legally correct.
+- Do not judge whether the answer is supported by context.
+- If the response is readable, do not label it "unusable".
+- If the response says the context is insufficient but still gives a substantive answer,
+  classify it as "attempted".
+- If the response only refuses or explains why it cannot answer, classify it as "abstained".
+
+Question:
+```
+{question}
+```
+
+Candidate response:
+```
+{candidate_response}
+```

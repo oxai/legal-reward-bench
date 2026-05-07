@@ -4,8 +4,8 @@ import argparse
 import re
 from pathlib import Path
 
-from common.ollama import generate as ollama_generate
-from common.schema import CandidateResponse, Triple, utc_now
+from common.llm import generate_text
+from common.records import CandidateResponse, Triple, utc_now
 from common.storage import read_jsonl, read_text, write_jsonl
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,7 +63,7 @@ def generate_responses(
     for index, triple in enumerate(triples, start=1):
         print(f"[{index}/{total}] Generating response for {triple.id}...", flush=True)
         prompt = prompt_template.format(context=triple.context, question=triple.question)
-        answer = ollama_generate(
+        answer = generate_text(
             model=model,
             prompt=prompt,
             temperature=temperature,

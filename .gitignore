@@ -5,6 +5,7 @@ __pycache__/
 
 pipeline/01_dataset/outputs/triples/*
 pipeline/01_dataset/outputs/candidate_responses/*
+pipeline/01_dataset/outputs/cache/*
 pipeline/02_preference/outputs/*
 pipeline/03_judge/data/*
 pipeline/03_judge/outputs/*

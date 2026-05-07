@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "faithfulness",
+    "legal_conclusion",
+    "completeness",
+    "conciseness"
+  ],
+  "properties": {
+    "faithfulness": {
+      "type": "string",
+      "enum": [
+        "fully_supported",
+        "partially_supported",
+        "unsupported",
+        "contradicted"
+      ]
+    },
+    "legal_conclusion": {
+      "type": "string",
+      "enum": ["correct", "incorrect"]
+    },
+    "completeness": {
+      "type": "string",
+      "enum": ["complete", "incomplete"]
+    },
+    "conciseness": {
+      "type": "string",
+      "enum": ["concise", "acceptable", "not_concise"]
+    }
+  }
+}

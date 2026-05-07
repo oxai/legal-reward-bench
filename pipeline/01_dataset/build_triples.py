@@ -6,7 +6,7 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-from common.schema import Triple
+from common.records import Triple
 from common.storage import write_jsonl
 
 ROOT = Path(__file__).resolve().parents[2]

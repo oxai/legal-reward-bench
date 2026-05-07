@@ -1,0 +1,57 @@
+You are judging the quality of an attempted answer to a legal question using only the provided legal materials.
+
+Label whether the answer is supported by the context, reaches the right legal conclusion, includes the core legal point, and stays concise.
+
+Return one JSON object that exactly follows the provided schema. Do not include markdown,
+comments, explanations, or extra keys.
+
+Use only the provided inputs. Do not use outside legal knowledge.
+
+Input roles:
+- Candidate context: the context shown to the model. Use it only for faithfulness.
+- Reference answer: the target answer. Use it for legal_conclusion and completeness.
+- Gold context: the original supporting legal context. Use it only to understand the reference answer.
+
+Labels:
+- faithfulness:
+  - "fully_supported": all material factual and legal claims in the response are supported by the candidate context.
+  - "partially_supported": the main answer is supported, but some material detail is not.
+  - "unsupported": the main answer is not supported by the candidate context.
+  - "contradicted": the response conflicts with the candidate context.
+- legal_conclusion:
+  - "correct": the response's bottom-line legal answer matches the reference answer.
+  - "incorrect": the response's bottom-line legal answer does not match the reference answer.
+- completeness:
+  - "complete": the response includes the core legal point needed to justify the reference answer.
+  - "incomplete": the response misses that core point, gives only a bare conclusion, or omits an essential condition or exception.
+- conciseness:
+  - "concise": direct, focused answer.
+  - "acceptable": includes useful explanation or qualifications without drifting.
+  - "not_concise": too long, repetitive, unfocused, or mostly copied from the context.
+
+Keep the labels separate: a response can be faithful but legally incorrect, or legally correct but unsupported.
+
+Question:
+```
+{question}
+```
+
+Authoritative gold legal context:
+```
+{gold_context}
+```
+
+Reference answer:
+```
+{reference_answer}
+```
+
+Candidate-provided legal context:
+```
+{candidate_context}
+```
+
+Candidate response:
+```
+{candidate_response}
+```
