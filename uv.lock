@@ -518,10 +518,10 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "datasets", specifier = ">=4.0.0" },
-    { name = "litellm", specifier = ">=1.79.0" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "rank-bm25", specifier = ">=0.2.2" },
+    { name = "datasets", specifier = "==4.8.5" },
+    { name = "litellm", specifier = "==1.83.14" },
+    { name = "numpy", specifier = "==2.4.4" },
+    { name = "rank-bm25", specifier = "==0.2.2" },
 ]
 
 [[package]]
