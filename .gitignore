@@ -2,16 +2,20 @@
 __pycache__/
 .pytest_cache/
 .env
+pipeline/_debug/
 
-pipeline/01_dataset/outputs/triples/*
-pipeline/01_dataset/outputs/candidate_responses/*
-pipeline/01_dataset/outputs/cache/*
-pipeline/02_preference/outputs/*
-pipeline/03_judge/data/*
-pipeline/03_judge/outputs/*
+pipeline/01_triples/outputs/*
+pipeline/01_triples/cache/*
+pipeline/02_responses/outputs/*
+pipeline/03_labels/outputs/*
+pipeline/04_pairs/outputs/*
+pipeline/05_reward_model/outputs/*
+pipeline/06_eval/outputs/*
 
-!pipeline/01_dataset/outputs/triples/.gitkeep
-!pipeline/01_dataset/outputs/candidate_responses/.gitkeep
-!pipeline/02_preference/outputs/.gitkeep
-!pipeline/03_judge/data/.gitkeep
-!pipeline/03_judge/outputs/.gitkeep
+!pipeline/01_triples/outputs/.gitkeep
+!pipeline/01_triples/cache/.gitkeep
+!pipeline/02_responses/outputs/.gitkeep
+!pipeline/03_labels/outputs/.gitkeep
+!pipeline/04_pairs/outputs/.gitkeep
+!pipeline/05_reward_model/outputs/.gitkeep
+!pipeline/06_eval/outputs/.gitkeep

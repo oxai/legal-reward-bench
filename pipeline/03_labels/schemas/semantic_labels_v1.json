@@ -3,7 +3,7 @@
   "additionalProperties": false,
   "required": [
     "faithfulness",
-    "legal_conclusion",
+    "correctness",
     "completeness",
     "conciseness"
   ],
@@ -17,7 +17,7 @@
         "contradicted"
       ]
     },
-    "legal_conclusion": {
+    "correctness": {
       "type": "string",
       "enum": ["correct", "incorrect"]
     },

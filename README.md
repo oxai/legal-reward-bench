@@ -6,7 +6,7 @@ Use `uv` to create and sync the local Python environment:
 uv sync
 ```
 
-For answer generation, make sure you have ollama running locally, e.g.
+For local answer generation, make sure Ollama is running:
 
 ```bash
 brew services start ollama
@@ -15,53 +15,50 @@ brew services start ollama
 ## Pipeline
 
 ```text
-pipeline/01_dataset/
-  Legal RAG Bench dataset -> triples -> candidate responses
+pipeline/01_triples/
+  Legal RAG Bench -> base triples -> context-variant triples
 
-pipeline/02_preference/
-  candidate responses -> labels -> preference pairs
+pipeline/02_responses/
+  context-variant triples -> candidate model responses
 
-pipeline/03_judge/
-  preference pairs -> judge model
+pipeline/03_labels/
+  candidate responses -> pointwise judge labels and metrics
+
+pipeline/04_pairs/
+  pointwise labels -> chosen/rejected preference pairs
+
+pipeline/05_reward_model/
+  preference pairs -> reward model training
+
+pipeline/06_eval/
+  reward model and policy evaluation
 ```
 
-### Dataset
-
-Builds the base research dataset: triples and candidate responses.
-
-```text
-outputs/triples/legal_rag_bench.jsonl
-outputs/candidate_responses/<model>__<prompt_version>.jsonl
-```
+## Current Commands
 
 Build triples:
 
 ```bash
-uv run python pipeline/01_dataset/build_triples.py
+uv run python pipeline/01_triples/build.py
 ```
 
 Generate candidate responses:
 
 ```bash
-uv run python pipeline/01_dataset/generate_responses.py --model qwen3.5:4b --limit 50 --no-think
+uv run python pipeline/02_responses/generate.py --model qwen3.5:4b --limit 50 --no-think
 ```
 
-Triple schema:
+Label responses:
 
-```json
-{
-  "id": "...",
-  "question": "...",
-  "context": "...",
-  "answer": "...",
-  "metadata": {}
-}
+```bash
+uv run python pipeline/03_labels/label.py --responses pipeline/02_responses/outputs/<responses>.jsonl
 ```
 
-## Preference
+Extract label metrics:
 
-TBD: labels the candidate answers and produces preference pairs.
-
-## Judge
-
-TBD: the actual model
+```bash
+uv run python pipeline/03_labels/metrics.py \
+  --triples pipeline/01_triples/outputs/triples.jsonl \
+  --responses pipeline/02_responses/outputs/<responses>.jsonl \
+  --labels pipeline/03_labels/outputs/<labels>.jsonl
+```

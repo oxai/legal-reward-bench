@@ -9,10 +9,10 @@ from common.records import CandidateResponse, Triple, utc_now
 from common.storage import read_jsonl, read_text, write_jsonl
 
 ROOT = Path(__file__).resolve().parents[2]
-STAGE_DIR = ROOT / "pipeline" / "01_dataset"
-DEFAULT_INPUT = STAGE_DIR / "outputs" / "triples" / "legal_rag_bench.jsonl"
+STAGE_DIR = ROOT / "pipeline" / "02_responses"
+DEFAULT_INPUT = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_PROMPT = STAGE_DIR / "prompts" / "generation_v1.txt"
-DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs" / "candidate_responses"
+DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate candidate legal responses.")

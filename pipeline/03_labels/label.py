@@ -12,8 +12,8 @@ from common.records import ResponseLabel, utc_now
 from common.storage import read_jsonl, read_text, write_jsonl
 
 ROOT = Path(__file__).resolve().parents[2]
-STAGE_DIR = ROOT / "pipeline" / "02_preference"
-DEFAULT_TRIPLES = ROOT / "pipeline" / "01_dataset" / "outputs" / "triples" / "legal_rag_bench.jsonl"
+STAGE_DIR = ROOT / "pipeline" / "03_labels"
+DEFAULT_TRIPLES = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_BEHAVIOR_PROMPT = STAGE_DIR / "prompts" / "answer_behavior_v1.txt"
 DEFAULT_SEMANTIC_PROMPT = STAGE_DIR / "prompts" / "semantic_labels_v1.txt"
 DEFAULT_BEHAVIOR_SCHEMA = STAGE_DIR / "schemas" / "answer_behavior_v1.json"
@@ -30,7 +30,7 @@ FINAL_LABEL_VALUES = {
         "contradicted",
         "not_applicable",
     },
-    "legal_conclusion": {"correct", "incorrect", "not_applicable"},
+    "correctness": {"correct", "incorrect", "not_applicable"},
     "completeness": {"complete", "incomplete", "not_applicable"},
     "conciseness": {"concise", "acceptable", "not_concise", "not_applicable"},
 }
@@ -129,7 +129,7 @@ async def label_responses(
 
             print(f"[{index}/{total}] Labeling {response['id']}...", flush=True)
             answerability = triple.get("metadata", {}).get("answerability", "answerable")
-            context_variant = triple.get("metadata", {}).get("context_variant", "gold_context")
+            context_variant = triple.get("metadata", {}).get("context_variant", "base")
             gold_context = resolve_gold_context(triple, gold_contexts)
             behavior_prompt = behavior_prompt_template.format(
                 question=triple["question"],
@@ -200,10 +200,22 @@ def build_gold_context_map(triples: dict[str, dict[str, Any]]) -> dict[str, str]
     gold_contexts: dict[str, str] = {}
     for triple in triples.values():
         metadata = triple.get("metadata", {})
-        context_variant = metadata.get("context_variant", "gold_context")
+        context_variant = metadata.get("context_variant")
         base_triple_id = metadata.get("base_triple_id", triple["id"])
-        if context_variant in {"gold_context", "gold_exact"}:
+        if context_variant == "base":
             gold_contexts[base_triple_id] = triple["context"]
+
+    expected_base_ids = {
+        triple.get("metadata", {}).get("base_triple_id", triple["id"]) for triple in triples.values()
+    }
+    missing = sorted(expected_base_ids - set(gold_contexts))
+    if missing:
+        raise ValueError(
+            "Could not resolve authoritative base context for "
+            f"{len(missing)} base triples. Ensure --triples includes context_variant='base' rows. "
+            f"Examples: {missing[:5]}"
+        )
+
     return gold_contexts
 
 
@@ -212,7 +224,7 @@ def resolve_gold_context(triple: dict[str, Any], gold_contexts: dict[str, str]) 
     base_triple_id = metadata.get("base_triple_id", triple["id"])
     if base_triple_id in gold_contexts:
         return gold_contexts[base_triple_id]
-    return triple["context"]
+    raise ValueError(f"Could not resolve authoritative gold context for {triple['id']}")
 
 
 async def generate_valid_payload(

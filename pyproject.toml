@@ -8,7 +8,10 @@ dependencies = [
     "datasets==4.8.5",
     "litellm==1.83.14",
     "numpy==2.4.4",
+    "python-dotenv==1.2.2",
     "rank-bm25==0.2.2",
+    "torch==2.11.0",
+    "transformers==5.8.0",
 ]
 
 [build-system]
