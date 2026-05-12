@@ -51,7 +51,7 @@ uv run python pipeline/02_responses/generate.py --model qwen3.5:4b --limit 50 --
 Label responses:
 
 ```bash
-uv run python pipeline/03_labels/label.py --responses pipeline/02_responses/outputs/<responses>.jsonl
+uv run python pipeline/03_labels/build.py --responses pipeline/02_responses/outputs/<responses>.jsonl
 ```
 
 Extract label metrics:

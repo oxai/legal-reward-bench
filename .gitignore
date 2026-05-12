@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .env
 pipeline/_debug/
+_dashboard/
 
 pipeline/01_triples/outputs/*
 pipeline/01_triples/cache/*

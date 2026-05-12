@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline" / "03_labels"))
 
-from label import build_gold_context_map, resolve_gold_context  # noqa: E402
+from build import build_gold_context_map, resolve_gold_context  # noqa: E402
 
 
 def make_triple(

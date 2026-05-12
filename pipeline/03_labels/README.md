@@ -22,7 +22,7 @@ outputs/metrics__*.csv
 Commands:
 
 ```bash
-uv run python pipeline/03_labels/label.py --responses pipeline/02_responses/outputs/<responses>.jsonl
+uv run python pipeline/03_labels/build.py --responses pipeline/02_responses/outputs/<responses>.jsonl
 uv run python pipeline/03_labels/metrics.py \
   --triples pipeline/01_triples/outputs/triples.jsonl \
   --responses pipeline/02_responses/outputs/<responses>.jsonl \
