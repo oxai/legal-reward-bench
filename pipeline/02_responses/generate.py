@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
-from common.llm import generate_text
+from common.llm import generate_text_async
 from common.records import CandidateResponse, Triple, utc_now
 from common.storage import read_jsonl, read_text, write_jsonl
 
@@ -14,6 +16,18 @@ DEFAULT_INPUT = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_PROMPT = STAGE_DIR / "prompts" / "generation_v1.txt"
 DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
 
+
+@dataclass(frozen=True)
+class GenerationConfig:
+    model: str
+    prompt_template: str
+    prompt_version: str
+    temperature: float
+    max_tokens: int
+    think: bool
+    concurrency: int
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate candidate legal responses.")
     parser.add_argument("--model", required=True)
@@ -21,10 +35,13 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--prompt", type=Path, default=DEFAULT_PROMPT)
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--no-think", action="store_true", help="Disable Ollama reasoning mode.")
+    parser.add_argument("--concurrency", type=int, default=1)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
+    if args.concurrency < 1:
+        raise ValueError("--concurrency must be at least 1.")
 
     records = read_jsonl(args.input)
     if args.limit is not None:
@@ -40,11 +57,13 @@ def main() -> None:
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         think=not args.no_think,
+        concurrency=args.concurrency,
     )
 
     output = args.output or default_output_path(args.model, args.prompt.stem)
     count = write_jsonl(output, (response.to_dict() for response in responses))
     print(f"Wrote {count} candidate responses to {output}")
+
 
 def generate_responses(
     triples: list[Triple],
@@ -55,44 +74,76 @@ def generate_responses(
     temperature: float,
     max_tokens: int,
     think: bool,
+    concurrency: int = 1,
 ) -> list[CandidateResponse]:
-    outputs: list[CandidateResponse] = []
-    model_slug = slugify_model(model)
-
+    config = GenerationConfig(
+        model=model,
+        prompt_template=prompt_template,
+        prompt_version=prompt_version,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        think=think,
+        concurrency=concurrency,
+    )
     total = len(triples)
-    for index, triple in enumerate(triples, start=1):
-        print(f"[{index}/{total}] Generating response for {triple.id}...", flush=True)
-        prompt = prompt_template.format(context=triple.context, question=triple.question)
-        answer = generate_text(
-            model=model,
-            prompt=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            think=think,
-        )
-        outputs.append(
-            CandidateResponse(
-                id=f"{triple.id}__{model_slug}__{prompt_version}",
-                triple_id=triple.id,
-                response=answer,
-                metadata={
-                    "model": model,
-                    "prompt_version": prompt_version,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "think": think,
-                    "created_at": utc_now(),
-                },
-            )
-        )
-    return outputs
+
+    async def run() -> list[CandidateResponse]:
+        semaphore = asyncio.Semaphore(config.concurrency)
+
+        async def one(index: int, triple: Triple) -> CandidateResponse:
+            async with semaphore:
+                return await _generate_response(index=index, total=total, triple=triple, config=config)
+
+        return list(await asyncio.gather(*(one(index, triple) for index, triple in enumerate(triples, start=1))))
+
+    return asyncio.run(run())
+
+
+async def _generate_response(
+    *,
+    index: int,
+    total: int,
+    triple: Triple,
+    config: GenerationConfig,
+) -> CandidateResponse:
+    print(f"[{index}/{total}] Generating response for {triple.id}...", flush=True)
+    prompt = config.prompt_template.format(context=triple.context, question=triple.question)
+    generation = await generate_text_async(
+        model=config.model,
+        prompt=prompt,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        think=config.think,
+    )
+    if generation.finish_reason == "length":
+        print(f"[{index}/{total}] Warning: response hit max_tokens for {triple.id}.", flush=True)
+
+    model_slug = slugify_model(config.model)
+    return CandidateResponse(
+        id=f"{triple.id}__{model_slug}__{config.prompt_version}",
+        triple_id=triple.id,
+        response=generation.text,
+        metadata={
+            "model": config.model,
+            "prompt_version": config.prompt_version,
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens,
+            "think": config.think,
+            "concurrency": config.concurrency,
+            "finish_reason": generation.finish_reason,
+            "created_at": utc_now(),
+        },
+    )
+
 
 def default_output_path(model: str, prompt_version: str) -> Path:
     return DEFAULT_OUTPUT_DIR / f"{slugify_model(model)}__{prompt_version}.jsonl"
 
+
 def slugify_model(model: str) -> str:
     slug = model.replace(":", "_").replace(".", "_")
     return re.sub(r"[^a-zA-Z0-9_]+", "_", slug).strip("_")
+
 
 if __name__ == "__main__":
     main()
