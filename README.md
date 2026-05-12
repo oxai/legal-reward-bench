@@ -62,3 +62,32 @@ uv run python pipeline/03_labels/metrics.py \
   --responses pipeline/02_responses/outputs/<responses>.jsonl \
   --labels pipeline/03_labels/outputs/<labels>.jsonl
 ```
+
+Build preference pairs:
+
+```bash
+uv run python pipeline/04_pairs/build.py \
+  --labels pipeline/03_labels/outputs/<labels>.jsonl \
+  --responses pipeline/02_responses/outputs/<responses>.jsonl [<more>.jsonl ...]
+```
+
+DPO fine-tuning:
+
+```bash
+uv run python pipeline/05_reward_model/train_dpo.py \
+  --pairs pipeline/04_pairs/outputs/pairs.jsonl \
+  --base-model Qwen/Qwen2.5-0.5B-Instruct
+```
+
+Evaluate reward accuracy (before/after DPO):
+
+```bash
+uv run python pipeline/06_eval/eval_dpo.py \
+  --model Qwen/Qwen2.5-0.5B-Instruct \
+  --source contextual_judge_bench
+
+uv run python pipeline/06_eval/eval_dpo.py \
+  --model pipeline/05_reward_model/outputs/dpo_model \
+  --base-model Qwen/Qwen2.5-0.5B-Instruct \
+  --source contextual_judge_bench
+```

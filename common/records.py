@@ -39,3 +39,18 @@ class ResponseLabel:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class PreferencePair:
+    id: str
+    triple_id: str
+    chosen_response_id: str
+    rejected_response_id: str
+    prompt: str
+    chosen: str
+    rejected: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
