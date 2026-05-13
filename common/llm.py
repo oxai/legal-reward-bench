@@ -11,6 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+GEMINI_SAFETY_THRESHOLD = os.getenv("GEMINI_SAFETY_THRESHOLD", "BLOCK_NONE")
+GEMINI_SAFETY_CATEGORIES = (
+    "HARM_CATEGORY_HARASSMENT",
+    "HARM_CATEGORY_HATE_SPEECH",
+    "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+    "HARM_CATEGORY_DANGEROUS_CONTENT",
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +43,8 @@ def completion_kwargs(model: str) -> dict[str, Any]:
     kwargs: dict[str, Any] = {"model": normalized}
     if normalized.startswith(("ollama/", "ollama_chat/")):
         kwargs["api_base"] = OLLAMA_HOST
+    if normalized.startswith("gemini/"):
+        kwargs["safety_settings"] = gemini_safety_settings()
     return kwargs
 
 
@@ -45,6 +54,10 @@ def embedding_kwargs(model: str) -> dict[str, Any]:
     if normalized.startswith("ollama/"):
         kwargs["api_base"] = OLLAMA_HOST
     return kwargs
+
+
+def gemini_safety_settings() -> list[dict[str, str]]:
+    return [{"category": category, "threshold": GEMINI_SAFETY_THRESHOLD} for category in GEMINI_SAFETY_CATEGORIES]
 
 
 def _completion_request_kwargs(

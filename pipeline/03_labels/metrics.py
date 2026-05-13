@@ -126,7 +126,6 @@ def summarize_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
     fully_supported = sum(row["faithfulness"] == "fully_supported" for row in attempted)
     correct = sum(row["correctness"] == "correct" for row in attempted)
     complete = sum(row["completeness"] == "complete" for row in attempted)
-    concise_or_acceptable = sum(row["conciseness"] in {"concise", "acceptable"} for row in attempted)
 
     return {
         "n": total,
@@ -145,8 +144,6 @@ def summarize_group(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "correct_attempted_rate": rate(correct, attempted_total),
         "complete_attempted_count": complete,
         "complete_attempted_rate": rate(complete, attempted_total),
-        "concise_or_acceptable_attempted_count": concise_or_acceptable,
-        "concise_or_acceptable_attempted_rate": rate(concise_or_acceptable, attempted_total),
     }
 
 

@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["completeness"],
+  "properties": {
+    "completeness": {
+      "type": "string",
+      "enum": ["complete", "incomplete"]
+    }
+  }
+}

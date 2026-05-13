@@ -11,24 +11,38 @@ from common.records import ResponseLabel, utc_now
 from common.storage import read_jsonl, read_text
 from judge import JsonJudge, JudgeConfig
 from rubric import (
-    DOWNSTREAM_LABELS,
+    SEMANTIC_LABELS,
     RUBRIC_VERSION,
     validate_behavior_payload,
+    validate_completeness_payload,
+    validate_correctness_payload,
+    validate_faithfulness_payload,
     validate_final_label_payload,
-    validate_semantic_payload,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGE_DIR = ROOT / "pipeline" / "03_labels"
 DEFAULT_TRIPLES = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_BEHAVIOR_PROMPT = STAGE_DIR / "prompts" / "answer_behavior_v1.txt"
-DEFAULT_SEMANTIC_PROMPT = STAGE_DIR / "prompts" / "semantic_labels_v1.txt"
 DEFAULT_BEHAVIOR_SCHEMA = STAGE_DIR / "schemas" / "answer_behavior_v1.json"
-DEFAULT_SEMANTIC_SCHEMA = STAGE_DIR / "schemas" / "semantic_labels_v1.json"
 DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
 DEFAULT_FALLBACK_JUDGE_MODEL = "gemini/gemini-2.5-flash"
 
-__all__ = ["build_gold_context_map", "resolve_gold_context"]
+SEMANTIC_PROMPTS = {
+    "faithfulness": STAGE_DIR / "prompts" / "faithfulness_v1.txt",
+    "correctness": STAGE_DIR / "prompts" / "correctness_v1.txt",
+    "completeness": STAGE_DIR / "prompts" / "completeness_v1.txt",
+}
+SEMANTIC_SCHEMAS = {
+    "faithfulness": STAGE_DIR / "schemas" / "faithfulness_v1.json",
+    "correctness": STAGE_DIR / "schemas" / "correctness_v1.json",
+    "completeness": STAGE_DIR / "schemas" / "completeness_v1.json",
+}
+SEMANTIC_VALIDATORS = {
+    "faithfulness": validate_faithfulness_payload,
+    "correctness": validate_correctness_payload,
+    "completeness": validate_completeness_payload,
+}
 
 
 @dataclass(frozen=True)
@@ -55,9 +69,9 @@ class LabelConfig:
 @dataclass(frozen=True)
 class LabelResources:
     behavior_prompt_template: str
-    semantic_prompt_template: str
     behavior_schema: dict[str, Any]
-    semantic_schema: dict[str, Any]
+    prompt_templates: dict[str, str]
+    schemas: dict[str, dict[str, Any]]
 
 
 def main() -> None:
@@ -121,9 +135,9 @@ def parse_args() -> argparse.Namespace:
 def load_resources() -> LabelResources:
     return LabelResources(
         behavior_prompt_template=read_text(DEFAULT_BEHAVIOR_PROMPT),
-        semantic_prompt_template=read_text(DEFAULT_SEMANTIC_PROMPT),
         behavior_schema=json.loads(DEFAULT_BEHAVIOR_SCHEMA.read_text(encoding="utf-8")),
-        semantic_schema=json.loads(DEFAULT_SEMANTIC_SCHEMA.read_text(encoding="utf-8")),
+        prompt_templates={name: read_text(path) for name, path in SEMANTIC_PROMPTS.items()},
+        schemas={name: json.loads(path.read_text(encoding="utf-8")) for name, path in SEMANTIC_SCHEMAS.items()},
     )
 
 
@@ -137,7 +151,6 @@ async def label_responses(
 ) -> list[ResponseLabel]:
     response_labeler = ResponseLabeler(
         triples=triples,
-        gold_contexts=build_gold_context_map(triples),
         resources=resources,
         config=config,
         judge=JsonJudge(config.judge_config()),
@@ -164,13 +177,11 @@ class ResponseLabeler:
         self,
         *,
         triples: dict[str, dict[str, Any]],
-        gold_contexts: dict[str, str],
         resources: LabelResources,
         config: LabelConfig,
         judge: JsonJudge,
     ) -> None:
         self.triples = triples
-        self.gold_contexts = gold_contexts
         self.resources = resources
         self.config = config
         self.judge = judge
@@ -189,25 +200,22 @@ class ResponseLabeler:
 
             answer_behavior = behavior.payload["answer_behavior"]
             if answer_behavior == "attempted":
-                semantic = await self.judge.generate(
-                    prompt=self.resources.semantic_prompt_template.format(
-                        question=triple["question"],
-                        gold_context=resolve_gold_context(triple, self.gold_contexts),
-                        candidate_context=triple["context"],
-                        reference_answer=triple["answer"],
-                        candidate_response=response["response"],
-                    ),
-                    schema=self.resources.semantic_schema,
-                    validate=validate_semantic_payload,
-                )
-                semantic_judge_model = semantic.model
-                label_payload = {"answer_behavior": answer_behavior, **semantic.payload}
+                label_payload = {"answer_behavior": answer_behavior}
+                semantic_judge_models: dict[str, str | None] = {}
+                for label_name in SEMANTIC_LABELS:
+                    result = await self._judge_semantic_label(
+                        label_name=label_name,
+                        triple=triple,
+                        response=response,
+                    )
+                    label_payload.update(result.payload)
+                    semantic_judge_models[f"{label_name}_judge_model"] = result.model
             else:
-                semantic_judge_model = None
                 label_payload = {
                     "answer_behavior": answer_behavior,
-                    **{key: "not_applicable" for key in DOWNSTREAM_LABELS},
+                    **{key: "not_applicable" for key in SEMANTIC_LABELS},
                 }
+                semantic_judge_models = {f"{key}_judge_model": None for key in SEMANTIC_LABELS}
 
             validation_errors = validate_final_label_payload(label_payload)
             if validation_errors:
@@ -218,10 +226,28 @@ class ResponseLabeler:
                 triple=triple,
                 labels=label_payload,
                 behavior_judge_model=behavior.model,
-                semantic_judge_model=semantic_judge_model,
+                semantic_judge_models=semantic_judge_models,
             )
         except Exception as exc:
             raise RuntimeError(f"Failed to label {response['id']}") from exc
+
+    async def _judge_semantic_label(
+        self,
+        *,
+        label_name: str,
+        triple: dict[str, Any],
+        response: dict[str, Any],
+    ) -> Any:
+        return await self.judge.generate(
+            prompt=self.resources.prompt_templates[label_name].format(
+                question=triple["question"],
+                candidate_context=triple["context"],
+                reference_answer=triple["answer"],
+                candidate_response=response["response"],
+            ),
+            schema=self.resources.schemas[label_name],
+            validate=SEMANTIC_VALIDATORS[label_name],
+        )
 
     def _triple_for_response(self, response: dict[str, Any]) -> dict[str, Any]:
         triple = self.triples.get(response["triple_id"])
@@ -236,59 +262,30 @@ class ResponseLabeler:
         triple: dict[str, Any],
         labels: dict[str, Any],
         behavior_judge_model: str,
-        semantic_judge_model: str | None,
+        semantic_judge_models: dict[str, str | None],
     ) -> ResponseLabel:
         metadata = triple.get("metadata", {})
+        label_metadata = {
+            "judge_model": self.config.judge_model,
+            "fallback_judge_model": self.config.fallback_judge_model,
+            "behavior_judge_model": behavior_judge_model,
+            **semantic_judge_models,
+            "rubric_version": RUBRIC_VERSION,
+            "schema_version": RUBRIC_VERSION,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "concurrency": self.config.concurrency,
+            "answerability": metadata.get("answerability", "answerable"),
+            "context_variant": metadata.get("context_variant", "base"),
+            "created_at": utc_now(),
+        }
         return ResponseLabel(
             id=f"{response['id']}__{slugify_model(self.config.judge_model)}__{RUBRIC_VERSION}",
             response_id=response["id"],
             triple_id=response["triple_id"],
             labels=labels,
-            metadata={
-                "judge_model": self.config.judge_model,
-                "fallback_judge_model": self.config.fallback_judge_model,
-                "behavior_judge_model": behavior_judge_model,
-                "semantic_judge_model": semantic_judge_model,
-                "rubric_version": RUBRIC_VERSION,
-                "schema_version": RUBRIC_VERSION,
-                "temperature": self.config.temperature,
-                "max_tokens": self.config.max_tokens,
-                "concurrency": self.config.concurrency,
-                "answerability": metadata.get("answerability", "answerable"),
-                "context_variant": metadata.get("context_variant", "base"),
-                "created_at": utc_now(),
-            },
+            metadata=label_metadata,
         )
-
-
-def build_gold_context_map(triples: dict[str, dict[str, Any]]) -> dict[str, str]:
-    gold_contexts: dict[str, str] = {}
-    for triple in triples.values():
-        metadata = triple.get("metadata", {})
-        base_triple_id = metadata.get("base_triple_id", triple["id"])
-        if metadata.get("context_variant") == "base":
-            gold_contexts[base_triple_id] = triple["context"]
-
-    expected_base_ids = {
-        triple.get("metadata", {}).get("base_triple_id", triple["id"]) for triple in triples.values()
-    }
-    missing = sorted(expected_base_ids - set(gold_contexts))
-    if missing:
-        raise ValueError(
-            "Could not resolve authoritative base context for "
-            f"{len(missing)} base triples. Ensure --triples includes context_variant='base' rows. "
-            f"Examples: {missing[:5]}"
-        )
-
-    return gold_contexts
-
-
-def resolve_gold_context(triple: dict[str, Any], gold_contexts: dict[str, str]) -> str:
-    metadata = triple.get("metadata", {})
-    base_triple_id = metadata.get("base_triple_id", triple["id"])
-    if base_triple_id in gold_contexts:
-        return gold_contexts[base_triple_id]
-    raise ValueError(f"Could not resolve authoritative gold context for {triple['id']}")
 
 
 def read_unique_jsonl(path: Path, *, id_key: str, label: str) -> list[dict[str, Any]]:

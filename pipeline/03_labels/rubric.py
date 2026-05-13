@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-RUBRIC_VERSION = "answer_behavior_v1+semantic_labels_v1"
+RUBRIC_VERSION = "answer_behavior_v1+faithfulness_v1+correctness_v1+completeness_v1"
 
 FINAL_LABEL_VALUES = {
     "answer_behavior": {"attempted", "abstained", "unusable"},
@@ -15,23 +15,30 @@ FINAL_LABEL_VALUES = {
     },
     "correctness": {"correct", "incorrect", "not_applicable"},
     "completeness": {"complete", "incomplete", "not_applicable"},
-    "conciseness": {"concise", "acceptable", "not_concise", "not_applicable"},
 }
 
 BEHAVIOR_VALUES = {"answer_behavior": FINAL_LABEL_VALUES["answer_behavior"]}
-SEMANTIC_VALUES = {
-    key: values - {"not_applicable"} for key, values in FINAL_LABEL_VALUES.items() if key != "answer_behavior"
-}
+FAITHFULNESS_VALUES = {"faithfulness": FINAL_LABEL_VALUES["faithfulness"] - {"not_applicable"}}
+CORRECTNESS_VALUES = {"correctness": FINAL_LABEL_VALUES["correctness"] - {"not_applicable"}}
+COMPLETENESS_VALUES = {"completeness": FINAL_LABEL_VALUES["completeness"] - {"not_applicable"}}
 REQUIRED_FINAL_LABELS = tuple(FINAL_LABEL_VALUES)
-DOWNSTREAM_LABELS = REQUIRED_FINAL_LABELS[1:]
+SEMANTIC_LABELS = REQUIRED_FINAL_LABELS[1:]
 
 
 def validate_behavior_payload(label: dict[str, Any]) -> list[str]:
     return validate_keys_and_values(label, BEHAVIOR_VALUES)
 
 
-def validate_semantic_payload(label: dict[str, Any]) -> list[str]:
-    return validate_keys_and_values(label, SEMANTIC_VALUES)
+def validate_faithfulness_payload(label: dict[str, Any]) -> list[str]:
+    return validate_keys_and_values(label, FAITHFULNESS_VALUES)
+
+
+def validate_correctness_payload(label: dict[str, Any]) -> list[str]:
+    return validate_keys_and_values(label, CORRECTNESS_VALUES)
+
+
+def validate_completeness_payload(label: dict[str, Any]) -> list[str]:
+    return validate_keys_and_values(label, COMPLETENESS_VALUES)
 
 
 def validate_final_label_payload(label: dict[str, Any]) -> list[str]:
@@ -39,11 +46,11 @@ def validate_final_label_payload(label: dict[str, Any]) -> list[str]:
 
     answer_behavior = label.get("answer_behavior")
     if answer_behavior == "attempted":
-        for key in DOWNSTREAM_LABELS:
+        for key in SEMANTIC_LABELS:
             if label.get(key) == "not_applicable":
                 errors.append(f"{key} must not be 'not_applicable' for attempted answers")
     elif answer_behavior in {"abstained", "unusable"}:
-        for key in DOWNSTREAM_LABELS:
+        for key in SEMANTIC_LABELS:
             if label.get(key) != "not_applicable":
                 errors.append(f"{key} must be 'not_applicable' for {answer_behavior} responses")
 
