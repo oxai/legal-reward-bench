@@ -30,14 +30,6 @@ _COMPLETENESS: dict[str, float] = {
     "incomplete": -1.0,
     "not_applicable": 0.0,
 }
-_CONCISENESS: dict[str, float] = {
-    "concise": 1.0,
-    "acceptable": 0.0,
-    "not_concise": -1.0,
-    "not_applicable": 0.0,
-}
-
-
 def score_label(labels: dict[str, Any], answerability: str) -> float:
     behavior = labels["answer_behavior"]
     if behavior == "unusable":
@@ -49,7 +41,6 @@ def score_label(labels: dict[str, Any], answerability: str) -> float:
             _FAITHFULNESS[labels["faithfulness"]]
             + _CORRECTNESS[labels["correctness"]]
             + _COMPLETENESS[labels["completeness"]]
-            + _CONCISENESS[labels["conciseness"]]
         )
     if behavior == "abstained":
         return 5.0

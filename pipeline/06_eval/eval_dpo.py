@@ -29,9 +29,10 @@ def main() -> None:
     parser.add_argument("--max-length", type=int, default=1024)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--qlora", action="store_true", help="Load base model in 4-bit NF4 for large models.")
     args = parser.parse_args()
 
-    model, tokenizer = load_model(args.model, args.base_model)
+    model, tokenizer = load_model(args.model, args.base_model, use_qlora=args.qlora)
     records = load_records(args)
     if args.limit is not None:
         records = records[: args.limit]
@@ -47,7 +48,7 @@ def main() -> None:
 
 
 def load_model(
-    model_path: str, base_model: str | None
+    model_path: str, base_model: str | None, *, use_qlora: bool = False
 ) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     path = Path(model_path)
     is_adapter = path.exists() and (path / "adapter_config.json").exists()
@@ -57,21 +58,34 @@ def load_model(
             raise ValueError("--base-model is required when --model is a LoRA adapter directory.")
         from peft import PeftModel
 
-        base = AutoModelForCausalLM.from_pretrained(
-            base_model, dtype=torch.bfloat16, device_map="auto"
-        )
+        base = _load_base(base_model, use_qlora=use_qlora)
         model = PeftModel.from_pretrained(base, model_path)
         tokenizer = AutoTokenizer.from_pretrained(model_path)
     else:
-        model = AutoModelForCausalLM.from_pretrained(
-            model_path, dtype=torch.bfloat16, device_map="auto"
-        )
+        model = _load_base(model_path, use_qlora=use_qlora)
         tokenizer = AutoTokenizer.from_pretrained(model_path)
 
     model.eval()
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
+
+
+def _load_base(model_path: str, *, use_qlora: bool) -> AutoModelForCausalLM:
+    if use_qlora:
+        from transformers import BitsAndBytesConfig
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+        )
+        return AutoModelForCausalLM.from_pretrained(
+            model_path, quantization_config=bnb_config, device_map={"": 0}
+        )
+    return AutoModelForCausalLM.from_pretrained(
+        model_path, dtype=torch.bfloat16, device_map="auto"
+    )
 
 
 def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
