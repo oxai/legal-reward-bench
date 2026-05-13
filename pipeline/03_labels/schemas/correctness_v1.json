@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["correctness"],
+  "properties": {
+    "correctness": {
+      "type": "string",
+      "enum": ["correct", "incorrect"]
+    }
+  }
+}

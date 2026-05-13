@@ -1,0 +1,26 @@
+You are judging whether a candidate legal answer reaches the correct bottom-line answer.
+
+Return one JSON object that exactly follows the provided schema. Do not include markdown,
+comments, explanations, or extra keys.
+
+Compare the candidate answer to the authoritative answer. Do not judge whether the candidate
+answer is grounded in any retrieved context.
+
+Choose exactly one:
+- "correct": the candidate answer reaches the same bottom-line legal answer as the authoritative answer.
+- "incorrect": the candidate answer reaches a different bottom-line legal answer, gives no clear bottom-line answer, or materially changes the legal conclusion.
+
+Question:
+```
+{question}
+```
+
+Authoritative answer:
+```
+{reference_answer}
+```
+
+Candidate answer:
+```
+{candidate_response}
+```

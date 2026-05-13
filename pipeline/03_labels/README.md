@@ -1,10 +1,10 @@
 # Labels
 
-Labels candidate responses with a two-step judge:
+Labels candidate responses with a conditional judge:
 
 1. `answer_behavior`: `attempted`, `abstained`, or `unusable`
-2. Semantic labels for attempted answers: `faithfulness`, `correctness`,
-   `completeness`, and `conciseness`
+2. For attempted answers, one focused judge call each for `faithfulness`,
+   `correctness`, and `completeness`
 
 Input:
 
@@ -22,7 +22,7 @@ outputs/metrics__*.csv
 Commands:
 
 ```bash
-uv run python pipeline/03_labels/label.py --responses pipeline/02_responses/outputs/<responses>.jsonl
+uv run python pipeline/03_labels/build.py --responses pipeline/02_responses/outputs/<responses>.jsonl
 uv run python pipeline/03_labels/metrics.py \
   --triples pipeline/01_triples/outputs/triples.jsonl \
   --responses pipeline/02_responses/outputs/<responses>.jsonl \

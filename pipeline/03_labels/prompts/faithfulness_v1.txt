@@ -1,0 +1,31 @@
+You are judging whether a candidate legal answer is supported by the legal context that was shown to the model.
+
+Return one JSON object that exactly follows the provided schema. Do not include markdown,
+comments, explanations, or extra keys.
+
+Use only the provided legal context. Do not use the authoritative answer, outside legal knowledge,
+or assumptions about what the law should be.
+
+Choose exactly one:
+- "fully_supported": the context supports the answer's main conclusion and all material claims made in the answer.
+- "partially_supported": the context supports the answer's main conclusion, but one or more other material claims made in the answer are not supported.
+- "unsupported": the context does not support the answer's main conclusion, even if it supports some surrounding or related claims.
+- "contradicted": the answer's main conclusion or material claims conflict with the context.
+
+Topical overlap alone is not support. Invented or mischaracterized material claims are not supported.
+If an invented or mischaracterized claim is the main conclusion, use "unsupported"; if it is a secondary material claim, use "partially_supported".
+
+Question:
+```
+{question}
+```
+
+Legal context shown to the model:
+```
+{candidate_context}
+```
+
+Candidate answer:
+```
+{candidate_response}
+```

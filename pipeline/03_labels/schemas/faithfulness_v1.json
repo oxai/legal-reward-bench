@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["faithfulness"],
+  "properties": {
+    "faithfulness": {
+      "type": "string",
+      "enum": [
+        "fully_supported",
+        "partially_supported",
+        "unsupported",
+        "contradicted"
+      ]
+    }
+  }
+}

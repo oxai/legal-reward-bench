@@ -17,6 +17,8 @@ Rules:
 - If the response is readable, do not label it "unusable".
 - If the response says the context is insufficient but still gives a substantive answer,
   classify it as "attempted".
+- If the response gives a yes/no answer, legal conclusion, or practical legal outcome,
+  classify it as "attempted", even if it includes uncertainty or caveats.
 - If the response only refuses or explains why it cannot answer, classify it as "abstained".
 
 Question:
