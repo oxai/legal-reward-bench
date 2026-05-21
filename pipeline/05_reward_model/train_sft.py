@@ -72,7 +72,7 @@ def main() -> None:
         args=sft_config,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         peft_config=lora_config,
     )
 
