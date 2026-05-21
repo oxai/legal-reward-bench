@@ -57,6 +57,8 @@ def main() -> None:
         warmup_ratio=args.warmup_ratio,
         beta=args.beta,
         max_length=args.max_length,
+        max_prompt_length=args.max_length // 2,
+        gradient_checkpointing=True,
         bf16=torch.cuda.is_available(),
         logging_steps=10,
         eval_strategy="epoch" if eval_dataset is not None else "no",
