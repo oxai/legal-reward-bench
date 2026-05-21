@@ -10,7 +10,14 @@ from typing import Any
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from common.storage import read_jsonl, read_text
+def read_text(path) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+def read_jsonl(path) -> list[dict]:
+    import json
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGE_DIR = ROOT / "pipeline" / "06_eval"

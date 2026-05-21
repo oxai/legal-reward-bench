@@ -169,19 +169,21 @@ def _apply_surgery_one_layer(layers: list, layer_idx: int, alpha: float) -> None
 def load_records(args: argparse.Namespace, *, default_pairs: Path, default_prompt: Path) -> list[dict[str, Any]]:
     if args.source == "contextual_judge_bench":
         from sources.contextual_judge_bench import QA_SPLITS, load_pairs
-        from common.storage import read_text
+        import json
 
         splits = (
             tuple(s.strip() for s in args.splits.split(",") if s.strip())
             if args.splits
             else QA_SPLITS
         )
-        prompt_template = read_text(default_prompt)
+        prompt_template = Path(default_prompt).read_text(encoding="utf-8")
         return load_pairs(prompt_template=prompt_template, splits=splits)
 
     pairs_path = args.pairs or default_pairs
-    from common.storage import read_jsonl
+    import json
+    with open(pairs_path, encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
     return [
         {"prompt": r["prompt"], "chosen": r["chosen"], "rejected": r["rejected"]}
-        for r in read_jsonl(pairs_path)
+        for r in records
     ]
