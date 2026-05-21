@@ -86,7 +86,7 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa",
+        MODEL_ID, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa",
     )
     model.eval()
     torch.manual_seed(args.seed)
