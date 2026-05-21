@@ -36,10 +36,11 @@ def main() -> None:
     parser.add_argument("--source", choices=["pipeline", "contextual_judge_bench"], default="pipeline")
     parser.add_argument("--pairs", type=Path, default=None)
     parser.add_argument("--splits", default=None, help="Comma-separated ContextualJudgeBench splits.")
-    parser.add_argument("--max-length", type=int, default=1024)
+    parser.add_argument("--max-length", type=int, default=4096)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--qlora", action="store_true", help="Load base model in 4-bit NF4 for large models.")
+    parser.add_argument("--flash-attn2", action="store_true", help="Use Flash Attention 2 (requires flash-attn).")
     parser.add_argument(
         "--spectral-layer", default=None,
         help="Comma-separated layer indices for spectral surgery, e.g. '7' or '7,14,20'.",
@@ -56,6 +57,15 @@ def main() -> None:
         "--snr-k", type=int, default=32,
         help="Lanczos rank k for --scan-snr (default 32, paper uses 32).",
     )
+    parser.add_argument(
+        "--pairs-output", type=Path, default=None, metavar="PATH",
+        help="If set, write per-pair JSONL {idx, split, correct} to this file.",
+    )
+    parser.add_argument(
+        "--length-normalize", action="store_true",
+        help="Use mean per-token log-prob instead of sum. Sum is default since it matches DPO's training objective; "
+             "the length_controlled subset metric handles length bias more cleanly than this flag.",
+    )
     args = parser.parse_args()
 
     _check_vram()
@@ -69,7 +79,7 @@ def main() -> None:
 
     # Load base model first — surgery is applied here, before the LoRA adapter is attached.
     # This matches the spectral-steering-v2 pattern: surgery on raw base weights, then eval.
-    base = _load_base(base_id, use_qlora=args.qlora)
+    base = _load_base(base_id, use_qlora=args.qlora, use_flash_attn2=args.flash_attn2)
 
     # --scan-snr: fast Lanczos sweep, print table, write CSV, exit.
     if args.scan_snr:
@@ -109,14 +119,19 @@ def main() -> None:
     if args.limit is not None:
         records = _limit_balanced(records, args.limit)
 
-    print(f"Evaluating {len(records)} pairs...")
-    results = evaluate(model, tokenizer, records, max_length=args.max_length)
+    print(f"Evaluating {len(records)} pairs... (length_normalize={args.length_normalize})")
+    results, pair_records = evaluate(model, tokenizer, records, max_length=args.max_length,
+                                     length_normalize=args.length_normalize)
 
     print_table(results)
 
     output = args.output or default_output_path(args.model, layers, alphas)
     write_csv(output, results)
     print(f"Wrote results to {output}")
+
+    if args.pairs_output is not None:
+        write_pairs_jsonl(args.pairs_output, pair_records)
+        print(f"Wrote per-pair output to {args.pairs_output}")
 
 
 def _check_vram() -> None:
@@ -133,18 +148,23 @@ def _check_vram() -> None:
         )
 
 
-def _load_base(model_path: str, *, use_qlora: bool) -> AutoModelForCausalLM:
+def _load_base(model_path: str, *, use_qlora: bool, use_flash_attn2: bool = False) -> AutoModelForCausalLM:
+    attn_impl = "flash_attention_2" if use_flash_attn2 else "sdpa"
     if use_qlora:
         from transformers import BitsAndBytesConfig
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
         )
         return AutoModelForCausalLM.from_pretrained(
-            model_path, quantization_config=bnb_config, dtype=torch.float16, device_map="auto"
+            model_path, quantization_config=bnb_config, device_map="auto",
+            attn_implementation=attn_impl,
         )
     return AutoModelForCausalLM.from_pretrained(
-        model_path, torch_dtype=torch.bfloat16, device_map="auto"
+        model_path, torch_dtype=torch.bfloat16, device_map="auto",
+        attn_implementation=attn_impl,
     )
 
 
@@ -280,44 +300,123 @@ def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
     ]
 
 
+def _wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score 95% CI for binomial proportion — what RewardBench reports per split."""
+    if n == 0:
+        return (0.0, 0.0)
+    p = k / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * (((p * (1 - p) + z * z / (4 * n)) / n) ** 0.5) / denom
+    return (max(0.0, centre - half), min(1.0, centre + half))
+
+
 def evaluate(
     model: AutoModelForCausalLM,
     tokenizer: AutoTokenizer,
     records: list[dict[str, Any]],
     max_length: int,
-) -> dict[str, dict[str, Any]]:
+    length_normalize: bool = False,
+    length_ratio_threshold: float = 2.0,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Score pairs and return (per-split metrics, per-pair records).
+
+    Per-split fields (RewardBench-comparable):
+      - reward_accuracy:   pairwise accuracy (random=0.5)
+      - ci_low, ci_high:   Wilson score 95% CI
+      - mean_margin:       mean(logp_chosen − logp_rejected); DPO-style preference strength
+
+    Synthetic rows:
+      - "overall":           micro-average over all pairs
+      - "macro":             unweighted mean across real splits (each sub-skill weighted equally)
+      - "length_controlled": micro-average over pairs with len ratio ≤ threshold (no length artifact)
+    """
     split_correct: dict[str, int] = defaultdict(int)
     split_total: dict[str, int] = defaultdict(int)
+    split_margin_sum: dict[str, float] = defaultdict(float)
+    pair_records: list[dict[str, Any]] = []
+    lc_correct = 0
+    lc_total = 0
+    lc_margin_sum = 0.0
 
     total = len(records)
     skipped = 0
     for index, record in enumerate(records, start=1):
         split = record.get("split", "all")
-        log_p_chosen = sequence_log_prob(model, tokenizer, record["prompt"], record["chosen"], max_length)
+        log_p_chosen = sequence_log_prob(model, tokenizer, record["prompt"], record["chosen"], max_length, length_normalize)
         torch.cuda.empty_cache()
-        log_p_rejected = sequence_log_prob(model, tokenizer, record["prompt"], record["rejected"], max_length)
+        log_p_rejected = sequence_log_prob(model, tokenizer, record["prompt"], record["rejected"], max_length, length_normalize)
         torch.cuda.empty_cache()
         if log_p_chosen is None or log_p_rejected is None:
             skipped += 1
             continue
-        correct = log_p_chosen > log_p_rejected
+        margin = log_p_chosen - log_p_rejected
+        correct = margin > 0
         split_correct[split] += int(correct)
         split_correct["overall"] += int(correct)
         split_total[split] += 1
         split_total["overall"] += 1
+        split_margin_sum[split] += margin
+        split_margin_sum["overall"] += margin
+
+        len_c = len(record["chosen"])
+        len_r = len(record["rejected"])
+        ratio = max(len_c, len_r) / max(1, min(len_c, len_r))
+        in_lc = ratio <= length_ratio_threshold
+        if in_lc:
+            lc_correct += int(correct)
+            lc_total += 1
+            lc_margin_sum += margin
+
+        pair_records.append({
+            "idx": index - 1, "split": split, "correct": int(correct),
+            "margin": round(margin, 4),
+            "len_chosen": len_c, "len_rejected": len_r, "in_length_controlled": int(in_lc),
+        })
         if index % 50 == 0 or index == total:
             n_scored = split_total["overall"]
             overall_acc = split_correct["overall"] / n_scored if n_scored else 0.0
             print(f"[{index}/{total}] scored={n_scored} skipped={skipped} overall reward_accuracy={overall_acc:.3f}", flush=True)
 
-    return {
-        split: {
-            "n": split_total[split],
-            "correct": split_correct[split],
-            "reward_accuracy": round(split_correct[split] / split_total[split], 4),
+    def _row(n: int, correct: int, margin_sum: float) -> dict[str, Any]:
+        acc = correct / n if n else 0.0
+        lo, hi = _wilson_ci(correct, n)
+        return {
+            "n": n,
+            "correct": correct,
+            "reward_accuracy": round(acc, 4),
+            "ci_low": round(lo, 4),
+            "ci_high": round(hi, 4),
+            "mean_margin": round(margin_sum / n, 4) if n else 0.0,
         }
+
+    results: dict[str, dict[str, Any]] = {
+        split: _row(split_total[split], split_correct[split], split_margin_sum[split])
         for split in split_total
     }
+    real_splits = [s for s in split_total if s != "overall"]
+    if real_splits:
+        macro_acc = sum(results[s]["reward_accuracy"] for s in real_splits) / len(real_splits)
+        macro_margin = sum(results[s]["mean_margin"] for s in real_splits) / len(real_splits)
+        results["macro"] = {
+            "n": len(real_splits),
+            "correct": "",
+            "reward_accuracy": round(macro_acc, 4),
+            "ci_low": "",
+            "ci_high": "",
+            "mean_margin": round(macro_margin, 4),
+        }
+    if lc_total:
+        results["length_controlled"] = _row(lc_total, lc_correct, lc_margin_sum)
+    return results, pair_records
+
+
+def write_pairs_jsonl(path: Path, pair_records: list[dict[str, Any]]) -> None:
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for rec in pair_records:
+            f.write(json.dumps(rec) + "\n")
 
 
 def sequence_log_prob(
@@ -326,6 +425,7 @@ def sequence_log_prob(
     prompt: str,
     completion: str,
     max_length: int,
+    length_normalize: bool = False,
 ) -> float | None:
     prompt_ids = tokenizer(prompt, return_tensors="pt", add_special_tokens=True)["input_ids"]
     completion_ids = tokenizer(completion, return_tensors="pt", add_special_tokens=False)["input_ids"]
@@ -349,7 +449,8 @@ def sequence_log_prob(
         return 0.0
 
     log_probs = torch.nn.functional.log_softmax(response_logits, dim=-1)
-    return log_probs[torch.arange(len(response_labels)), response_labels].sum().item()
+    token_log_probs = log_probs[torch.arange(len(response_labels)), response_labels]
+    return token_log_probs.mean().item() if length_normalize else token_log_probs.sum().item()
 
 
 def print_snr_table(results: list[tuple[int, float]]) -> None:
@@ -373,20 +474,28 @@ def write_snr_csv(path: Path, results: list[tuple[int, float]]) -> None:
 
 
 def print_table(results: dict[str, dict[str, Any]]) -> None:
-    rows = sorted(results.items(), key=lambda x: (x[0] != "overall", x[0]))
+    priority = {"overall": 0, "macro": 1, "length_controlled": 2}
+    rows = sorted(results.items(), key=lambda x: (priority.get(x[0], 3), x[0]))
     col_w = max(len(split) for split, _ in rows)
-    print(f"\n{'split':<{col_w}}  {'n':>6}  {'reward_accuracy':>16}")
-    print("-" * (col_w + 28))
+    print(f"\n{'split':<{col_w}}  {'n':>6}  {'acc':>7}  {'95% CI':>15}  {'margin':>8}")
+    print("-" * (col_w + 44))
     for split, stats in rows:
-        print(f"{split:<{col_w}}  {stats['n']:>6}  {stats['reward_accuracy']:>16.4f}")
+        ci = (
+            f"[{stats['ci_low']:.3f},{stats['ci_high']:.3f}]"
+            if isinstance(stats.get("ci_low"), (int, float))
+            else "—"
+        )
+        print(f"{split:<{col_w}}  {stats['n']:>6}  {stats['reward_accuracy']:>7.4f}  {ci:>15}  {stats['mean_margin']:>8.3f}")
     print()
 
 
 def write_csv(path: Path, results: dict[str, dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = sorted(results.items(), key=lambda x: (x[0] != "overall", x[0]))
+    priority = {"overall": 0, "macro": 1, "length_controlled": 2}
+    rows = sorted(results.items(), key=lambda x: (priority.get(x[0], 3), x[0]))
+    fields = ["split", "n", "correct", "reward_accuracy", "ci_low", "ci_high", "mean_margin"]
     with path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["split", "n", "correct", "reward_accuracy"])
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         for split, stats in rows:
             writer.writerow({"split": split, **stats})

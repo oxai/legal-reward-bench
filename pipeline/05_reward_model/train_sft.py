@@ -9,6 +9,7 @@ from trl import SFTConfig, SFTTrainer
 
 from model_utils import (
     add_shared_args,
+    apply_spectral_surgery_from_args,
     load_model_and_tokenizer,
     load_records,
     make_lora_config,
@@ -44,7 +45,9 @@ def main() -> None:
     eval_dataset = Dataset.from_list(eval_records) if eval_records else None
     print(f"Train: {len(train_dataset)}, Eval: {len(eval_records)}")
 
-    model, tokenizer = load_model_and_tokenizer(args.base_model, use_qlora=args.qlora)
+    fa2 = getattr(args, "flash_attn2", False)
+    model, tokenizer = load_model_and_tokenizer(args.base_model, use_qlora=args.qlora, use_flash_attn2=fa2)
+    apply_spectral_surgery_from_args(model, args)
     lora_config = make_lora_config(r=args.lora_r, alpha=args.lora_alpha)
 
     sft_config = SFTConfig(
@@ -56,6 +59,7 @@ def main() -> None:
         warmup_ratio=args.warmup_ratio,
         max_length=args.max_length,
         bf16=torch.cuda.is_available(),
+        gradient_checkpointing=args.gradient_checkpointing,
         logging_steps=10,
         eval_strategy="epoch" if eval_dataset is not None else "no",
         save_strategy="epoch",

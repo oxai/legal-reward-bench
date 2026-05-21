@@ -9,6 +9,7 @@ from trl import DPOConfig, DPOTrainer
 
 from model_utils import (
     add_shared_args,
+    apply_spectral_surgery_from_args,
     load_model_and_tokenizer,
     load_records,
     make_lora_config,
@@ -44,6 +45,7 @@ def main() -> None:
     print(f"Train: {len(train_dataset)}, Eval: {len(eval_records)}")
 
     model, tokenizer = _load_model(args)
+    apply_spectral_surgery_from_args(model, args)
     lora_config = make_lora_config(r=args.lora_r, alpha=args.lora_alpha)
 
     dpo_config = DPOConfig(
@@ -61,6 +63,7 @@ def main() -> None:
         save_strategy="epoch",
         remove_unused_columns=False,
         report_to="none",
+        seed=args.seed,
     )
 
     trainer = DPOTrainer(
@@ -79,25 +82,26 @@ def main() -> None:
 
 
 def _load_model(args: argparse.Namespace):
+    fa2 = getattr(args, "flash_attn2", False)
     if args.sft_model is not None:
         if args.qlora:
             # Quantized models can't be merged — DPO starts from base with a fresh LoRA
             print("Note: --sft-model is skipped with --qlora (adapters cannot be merged into quantized weights).")
-            return load_model_and_tokenizer(args.base_model, use_qlora=True)
+            return load_model_and_tokenizer(args.base_model, use_qlora=True, use_flash_attn2=fa2)
 
         sft_path = args.sft_model
         is_adapter = (sft_path / "adapter_config.json").exists()
         if is_adapter:
             from peft import PeftModel
-            base, tokenizer = load_model_and_tokenizer(args.base_model)
+            base, tokenizer = load_model_and_tokenizer(args.base_model, use_flash_attn2=fa2)
             print(f"Loading SFT adapter from {sft_path} and merging into base...")
             model = PeftModel.from_pretrained(base, str(sft_path))
             model = model.merge_and_unload()
         else:
-            model, tokenizer = load_model_and_tokenizer(str(sft_path))
+            model, tokenizer = load_model_and_tokenizer(str(sft_path), use_flash_attn2=fa2)
         return model, tokenizer
 
-    return load_model_and_tokenizer(args.base_model, use_qlora=args.qlora)
+    return load_model_and_tokenizer(args.base_model, use_qlora=args.qlora, use_flash_attn2=fa2)
 
 
 if __name__ == "__main__":
