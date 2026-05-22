@@ -162,9 +162,9 @@ def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         prompt_template = DEFAULT_PROMPT.read_text(encoding="utf-8")
         return load_pairs(prompt_template=prompt_template, splits=splits)
 
-    sys.path.insert(0, str(ROOT))
-    from common.storage import read_jsonl
     pairs_path = args.pairs or DEFAULT_PAIRS
+    with open(pairs_path, encoding="utf-8") as f:
+        records = [json.loads(line) for line in f if line.strip()]
     return [
         {
             "prompt": r["prompt"],
@@ -172,7 +172,7 @@ def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
             "rejected": r["rejected"],
             "split": r.get("split") or r.get("metadata", {}).get("context_variant", "pipeline"),
         }
-        for r in read_jsonl(pairs_path)
+        for r in records
         if "prompt" in r
     ]
 
