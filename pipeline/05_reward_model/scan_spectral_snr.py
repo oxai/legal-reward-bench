@@ -7,7 +7,6 @@ SNR (S[0] / S.median()) identifies the target layer from weights alone.
 from __future__ import annotations
 
 import argparse
-import sys
 import torch
 from transformers import AutoModelForCausalLM
 
@@ -32,18 +31,26 @@ def main() -> None:
         raise RuntimeError("Cannot locate transformer layers")
 
     rows = []
+    out_partial = (args.out or "/tmp/snr_partial.tsv")
+    # Write header immediately so file exists even mid-run
+    with open(out_partial, "w") as f:
+        f.write("layer\tsnr\ts_0\ts_median\ts_mean\ts_std\n")
     for li, layer in enumerate(layers):
         dp = layer.mlp.down_proj
-        W = dp.weight.data.float().cpu()
-        U, S, Vh = torch.linalg.svd(W, full_matrices=False)
+        # SVD on GPU in float32 — much faster than CPU
+        W = dp.weight.data.float()
+        S = torch.linalg.svdvals(W)  # only singular values needed
         snr = (S[0] / S.median()).item()
         s0 = S[0].item()
         smed = S.median().item()
         smean = S.mean().item()
         sstd = S.std().item()
         rows.append((li, snr, s0, smed, smean, sstd))
-        del W, U, S, Vh
+        del W, S
         torch.cuda.empty_cache()
+        # Append to partial file as we go
+        with open(out_partial, "a") as f:
+            f.write(f"{li}\t{snr:.4f}\t{s0:.4f}\t{smed:.4f}\t{smean:.4f}\t{sstd:.4f}\n")
         print(f"  L{li:2d}  SNR={snr:7.3f}  S[0]={s0:7.3f}  median={smed:7.3f}  mean={smean:6.3f}  std={sstd:6.3f}", flush=True)
 
     print("\nTop-5 layers by SNR:")
