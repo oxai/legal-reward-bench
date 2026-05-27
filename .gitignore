@@ -7,6 +7,32 @@ __pycache__/
 pipeline/_debug/
 _dashboard/
 
+# paper and scratch files — not part of the code release
+paper/
+data/
+*.pdf
+LMM.pdf
+Syco.pdf
+
+# ad-hoc training/eval scripts
+ablation_v3.sh
+compare_v2_v3.sh
+eval_5model_transfer.sh
+eval_sfr_and_ministral_lrb.sh
+reeval_v3.sh
+train_combined_v2_reseed.sh
+train_gemma2_ablation.sh
+train_gemma_ablation_seeds.sh
+train_gemma_v1_s0.sh
+train_gemma_v1_seeds.sh
+train_ministral_ablation_seeds.sh
+train_sfr_combined.sh
+train_sfr_judge_combined.sh
+eval_sfr_judge.sh
+push_adapters_to_hf.sh
+pipeline/multimodel_followon.sh
+tmp_eval_v3.sh
+
 pipeline/01_triples/outputs/*
 pipeline/01_triples/cache/*
 pipeline/02_responses/outputs/*

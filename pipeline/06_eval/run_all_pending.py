@@ -1,9 +1,8 @@
 """
 Sequential GPU job queue:
-  1. DPO+surgery (L04+L15) per-split eval on CJB 400-pair test set → paper Table 1
-  2. Rilton cross-benchmark eval (max-length=8192)
-  3. DPO training on Rilton's pairs
-  4. Rilton-DPO eval on CJB 400-pair test set
+  1. Rilton cross-benchmark eval (raw + dpo; no surgery)
+  2. DPO training on Rilton's pairs
+  3. Rilton-DPO eval on CJB 400-pair test set (reverse transfer)
 """
 from __future__ import annotations
 
@@ -50,37 +49,11 @@ def read_csv(path: Path) -> dict[str, float]:
 
 def main() -> None:
     # ------------------------------------------------------------------ #
-    # 1. DPO+surgery per-split on the 400-pair CJB test set              #
-    # ------------------------------------------------------------------ #
-    surgery_csv = OUT / "surgery_cjb_l04l15.csv"
-    if not surgery_csv.exists():
-        _run([
-            PYTHON, DPO_EVAL,
-            "--model", DPO_ADAPTER,
-            "--base-model", BASE_MODEL,
-            "--source", "pipeline",
-            "--pairs", CJB_TEST,
-            "--output", str(surgery_csv),
-            "--qlora",
-            "--spectral-layer", "4,15",
-            "--spectral-alpha", "0.2,0.1",
-        ], OUT / "surgery_cjb_l04l15.log")
-    else:
-        print(f"[skip] surgery_cjb_l04l15.csv", flush=True)
-
-    if surgery_csv.exists():
-        res = read_csv(surgery_csv)
-        print("\nSurgery CJB results (400-pair test set):")
-        for k, v in sorted(res.items(), key=lambda x: (x[0] != "overall", x[0])):
-            print(f"  {k:<30} {v:.4f}")
-
-    # ------------------------------------------------------------------ #
-    # 2. Rilton cross-benchmark eval                                      #
+    # 1. Rilton cross-benchmark eval (raw baseline + DPO transfer)        #
     # ------------------------------------------------------------------ #
     RILTON_CONFIGS = [
-        ("raw",             BASE_MODEL,  BASE_MODEL, None,   None),
-        ("dpo",             DPO_ADAPTER, BASE_MODEL, None,   None),
-        ("dpo_surg_l04l15", DPO_ADAPTER, BASE_MODEL, "4,15", "0.2,0.1"),
+        ("raw", BASE_MODEL,  BASE_MODEL, None, None),
+        ("dpo", DPO_ADAPTER, BASE_MODEL, None, None),
     ]
     RILTON_OUT.mkdir(parents=True, exist_ok=True)
     for slug, model, base, layers, alphas in RILTON_CONFIGS:
@@ -100,11 +73,8 @@ def main() -> None:
         ]
         if model != base:
             cmd += ["--base-model", base]
-        if layers:
-            cmd += ["--spectral-layer", layers, "--spectral-alpha", alphas]
         _run(cmd, RILTON_OUT / f"{slug}.log")
 
-    # Print Rilton summary
     print("\nRilton eval summary:")
     for slug, *_ in RILTON_CONFIGS:
         res = read_csv(RILTON_OUT / f"{slug}.csv")
@@ -112,7 +82,7 @@ def main() -> None:
         print(f"  {slug:<25} {ov:.4f}" if ov else f"  {slug:<25} FAILED")
 
     # ------------------------------------------------------------------ #
-    # 3. DPO training on Rilton's pairs                                   #
+    # 2. DPO training on Rilton's pairs                                   #
     # ------------------------------------------------------------------ #
     rilton_adapter = Path(RILTON_DPO)
     if not (rilton_adapter / "adapter_config.json").exists():
@@ -127,10 +97,10 @@ def main() -> None:
             "--learning-rate", "5e-5",
         ], OUT / "rilton_dpo_train.log")
     else:
-        print(f"[skip] Rilton DPO already trained", flush=True)
+        print("[skip] Rilton DPO already trained", flush=True)
 
     # ------------------------------------------------------------------ #
-    # 4. Rilton-DPO on CJB 400-pair test set (reverse transfer)          #
+    # 3. Rilton-DPO on CJB 400-pair test set (reverse transfer)          #
     # ------------------------------------------------------------------ #
     if (rilton_adapter / "adapter_config.json").exists():
         reverse_csv = OUT / "rilton_dpo_on_cjb.csv"
