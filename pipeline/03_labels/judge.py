@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -12,7 +11,6 @@ from common.llm import generate_json
 @dataclass(frozen=True)
 class JudgeConfig:
     model: str
-    fallback_model: str | None
     temperature: float
     max_tokens: int
     timeout_seconds: int
@@ -37,32 +35,20 @@ class JsonJudge:
         validate: Callable[[dict[str, Any]], list[str]],
     ) -> JudgeResult:
         errors: list[str] = []
-        for model_index, model in enumerate(self._models()):
-            if model_index:
-                print(f"Falling back to judge model {model}.", file=sys.stderr, flush=True)
-
-            result = await self._try_model(
-                model=model,
-                prompt=prompt,
-                schema=schema,
-                validate=validate,
-                errors=errors,
-            )
-            if result is not None:
-                return result
+        result = await self._try_model(
+            prompt=prompt,
+            schema=schema,
+            validate=validate,
+            errors=errors,
+        )
+        if result is not None:
+            return result
 
         raise RuntimeError("Judge returned invalid label payload: " + "; ".join(errors))
-
-    def _models(self) -> list[str]:
-        models = [self.config.model]
-        if self.config.fallback_model and self.config.fallback_model != self.config.model:
-            models.append(self.config.fallback_model)
-        return models
 
     async def _try_model(
         self,
         *,
-        model: str,
         prompt: str,
         schema: dict[str, Any],
         validate: Callable[[dict[str, Any]], list[str]],
@@ -71,7 +57,7 @@ class JsonJudge:
         for attempt in range(self.config.retries + 1):
             try:
                 payload = await generate_json(
-                    model=model,
+                    model=self.config.model,
                     prompt=self._prompt_for_attempt(prompt, attempt, errors),
                     schema=schema,
                     temperature=self.config.temperature,
@@ -79,10 +65,9 @@ class JsonJudge:
                     timeout_seconds=self.config.timeout_seconds,
                 )
             except Exception as exc:
-                errors.append(f"{model}: {exc}")
+                errors.append(f"{self.config.model}: {exc}")
                 print(
-                    f"Judge call failed for {model} on attempt {attempt + 1}: {exc}",
-                    file=sys.stderr,
+                    f"Judge call failed for {self.config.model} on attempt {attempt + 1}: {exc}",
                     flush=True,
                 )
                 await self._sleep_before_retry(attempt)
@@ -90,12 +75,11 @@ class JsonJudge:
 
             validation_errors = validate(payload)
             if not validation_errors:
-                return JudgeResult(payload=payload, model=model)
+                return JudgeResult(payload=payload, model=self.config.model)
 
-            errors.extend(f"{model}: {error}" for error in validation_errors)
+            errors.extend(f"{self.config.model}: {error}" for error in validation_errors)
             print(
-                f"Invalid label payload from {model} on attempt {attempt + 1}: {validation_errors}",
-                file=sys.stderr,
+                f"Invalid label payload from {self.config.model} on attempt {attempt + 1}: {validation_errors}",
                 flush=True,
             )
             await self._sleep_before_retry(attempt)

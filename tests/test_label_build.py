@@ -6,12 +6,13 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any, Callable
+from unittest.mock import AsyncMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline" / "03_labels"))
 
 from build import LabelConfig, LabelResources, ResponseLabeler  # noqa: E402
-from judge import JudgeResult  # noqa: E402
+from judge import JudgeConfig, JudgeResult, JsonJudge  # noqa: E402
 
 
 def make_triple() -> dict[str, Any]:
@@ -38,7 +39,6 @@ def make_response() -> dict[str, Any]:
 def make_config() -> LabelConfig:
     return LabelConfig(
         judge_model="judge-model",
-        fallback_judge_model="fallback-model",
         temperature=0.0,
         max_tokens=256,
         timeout_seconds=30,
@@ -86,6 +86,29 @@ class FakeJudge:
 
 
 class LabelBuildTests(unittest.IsolatedAsyncioTestCase):
+    async def test_json_judge_retries_same_model_without_fallback(self) -> None:
+        judge = JsonJudge(
+            JudgeConfig(
+                model="judge-model",
+                temperature=0.0,
+                max_tokens=256,
+                timeout_seconds=30,
+                retries=1,
+            )
+        )
+        generate = AsyncMock(side_effect=[RuntimeError("temporary"), {"answer_behavior": "attempted"}])
+
+        with patch("judge.generate_json", generate):
+            result = await judge.generate(
+                prompt="prompt",
+                schema={"title": "behavior"},
+                validate=lambda payload: [] if payload.get("answer_behavior") == "attempted" else ["bad"],
+            )
+
+        self.assertEqual(result.model, "judge-model")
+        self.assertEqual(generate.await_count, 2)
+        self.assertEqual([call.kwargs["model"] for call in generate.await_args_list], ["judge-model", "judge-model"])
+
     async def test_attempted_response_gets_three_independent_semantic_labels(self) -> None:
         judge = FakeJudge(
             [

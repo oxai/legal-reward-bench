@@ -26,7 +26,6 @@ DEFAULT_TRIPLES = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_BEHAVIOR_PROMPT = STAGE_DIR / "prompts" / "answer_behavior_v1.txt"
 DEFAULT_BEHAVIOR_SCHEMA = STAGE_DIR / "schemas" / "answer_behavior_v1.json"
 DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
-DEFAULT_FALLBACK_JUDGE_MODEL = "gemini/gemini-2.5-flash"
 
 SEMANTIC_PROMPTS = {
     "faithfulness": STAGE_DIR / "prompts" / "faithfulness_v1.txt",
@@ -48,7 +47,6 @@ SEMANTIC_VALIDATORS = {
 @dataclass(frozen=True)
 class LabelConfig:
     judge_model: str
-    fallback_judge_model: str | None
     temperature: float
     max_tokens: int
     timeout_seconds: int
@@ -58,7 +56,6 @@ class LabelConfig:
     def judge_config(self) -> JudgeConfig:
         return JudgeConfig(
             model=self.judge_model,
-            fallback_model=self.fallback_judge_model,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             timeout_seconds=self.timeout_seconds,
@@ -83,7 +80,6 @@ async def async_main() -> None:
     resources = load_resources()
     config = LabelConfig(
         judge_model=args.judge_model,
-        fallback_judge_model=args.fallback_judge_model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
         timeout_seconds=args.timeout_seconds,
@@ -128,7 +124,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=8)
-    parser.add_argument("--fallback-judge-model", default=DEFAULT_FALLBACK_JUDGE_MODEL)
     return parser.parse_args()
 
 
@@ -267,7 +262,6 @@ class ResponseLabeler:
         metadata = triple.get("metadata", {})
         label_metadata = {
             "judge_model": self.config.judge_model,
-            "fallback_judge_model": self.config.fallback_judge_model,
             "behavior_judge_model": behavior_judge_model,
             **semantic_judge_models,
             "rubric_version": RUBRIC_VERSION,
