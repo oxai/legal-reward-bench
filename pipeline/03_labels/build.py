@@ -26,6 +26,9 @@ DEFAULT_TRIPLES = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_BEHAVIOR_PROMPT = STAGE_DIR / "prompts" / "answer_behavior_v1.txt"
 DEFAULT_BEHAVIOR_SCHEMA = STAGE_DIR / "schemas" / "answer_behavior_v1.json"
 DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
+DEFAULT_JUDGE_MODEL = "digitalocean/openai-gpt-oss-120b"
+DEFAULT_MAX_TOKENS = 2048
+DEFAULT_CONCURRENCY = 30
 
 SEMANTIC_PROMPTS = {
     "faithfulness": STAGE_DIR / "prompts" / "faithfulness_v1.txt",
@@ -113,17 +116,20 @@ async def async_main() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Label candidate responses for preference data.")
-    parser.add_argument("--judge-model", default="ministral-3:14b")
+    parser = argparse.ArgumentParser(
+        description="Label candidate responses for preference data.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, help="LiteLLM model identifier for labels.")
     parser.add_argument("--triples", type=Path, default=DEFAULT_TRIPLES)
     parser.add_argument("--responses", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--max-tokens", type=int, default=2048)
-    parser.add_argument("--timeout-seconds", type=int, default=900)
-    parser.add_argument("--retries", type=int, default=1)
-    parser.add_argument("--concurrency", type=int, default=8)
+    parser.add_argument("--temperature", type=float, default=0.0, help="Sampling temperature.")
+    parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help="Maximum judge response tokens.")
+    parser.add_argument("--timeout-seconds", type=int, default=900, help="Per-call timeout.")
+    parser.add_argument("--retries", type=int, default=1, help="Retries per judge call after the first attempt.")
+    parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY, help="Maximum concurrent label requests.")
     return parser.parse_args()
 
 

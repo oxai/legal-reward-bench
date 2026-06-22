@@ -176,7 +176,15 @@ uv run python pipeline/01_triples/build.py
 Generate candidate responses:
 
 ```bash
-uv run python pipeline/02_responses/generate.py --model qwen3.5:4b --limit 50 --no-think
+for model in \
+  digitalocean/alibaba-qwen3-32b \
+  digitalocean/deepseek-3.2 \
+  digitalocean/glm-5 \
+  digitalocean/mistral-3-14B
+do
+  uv run python pipeline/02_responses/generate.py \
+    --model "$model"
+done
 ```
 
 Label responses:

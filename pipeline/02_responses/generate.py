@@ -15,6 +15,8 @@ STAGE_DIR = ROOT / "pipeline" / "02_responses"
 DEFAULT_INPUT = ROOT / "pipeline" / "01_triples" / "outputs" / "triples.jsonl"
 DEFAULT_PROMPT = STAGE_DIR / "prompts" / "generation_v1.txt"
 DEFAULT_OUTPUT_DIR = STAGE_DIR / "outputs"
+DEFAULT_MAX_TOKENS = 8192
+DEFAULT_CONCURRENCY = 48
 
 
 @dataclass(frozen=True)
@@ -29,15 +31,18 @@ class GenerationConfig:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate candidate legal responses.")
-    parser.add_argument("--model", required=True)
+    parser = argparse.ArgumentParser(
+        description="Generate candidate legal responses.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--model", required=True, help="LiteLLM model identifier to generate with.")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--prompt", type=Path, default=DEFAULT_PROMPT)
-    parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--max-tokens", type=int, default=2048)
+    parser.add_argument("--temperature", type=float, default=0.0, help="Sampling temperature.")
+    parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help="Maximum response tokens.")
     parser.add_argument("--no-think", action="store_true", help="Disable Ollama reasoning mode.")
-    parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY, help="Maximum concurrent generation requests.")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
     if args.concurrency < 1:
@@ -74,7 +79,7 @@ def generate_responses(
     temperature: float,
     max_tokens: int,
     think: bool,
-    concurrency: int = 1,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> list[CandidateResponse]:
     config = GenerationConfig(
         model=model,
