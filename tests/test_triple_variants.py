@@ -7,6 +7,7 @@ import re
 import sys
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "pipeline" / "01_triples"))
 
 from common.records import Triple
-from build import interleave_base_and_variants, make_base_triples
 from sources.legal_rag_bench import build_context as source_build_context
 from variants import build_variant_triples, parse_variant_selection
 from variants.bm25 import build_bm25_variants
@@ -28,6 +28,16 @@ from variants.glove import build_glove_variants
 from variants.nomic import build_nomic_variants
 from variants.random import build_random_variants
 from variants.surrounding import build_surrounding_variants, surrounding_gold_slot, surrounding_rows
+
+_BUILD_SPEC = importlib.util.spec_from_file_location(
+    "triple_build",
+    ROOT / "pipeline" / "01_triples" / "build.py",
+)
+assert _BUILD_SPEC is not None and _BUILD_SPEC.loader is not None
+_BUILD = importlib.util.module_from_spec(_BUILD_SPEC)
+_BUILD_SPEC.loader.exec_module(_BUILD)
+interleave_base_and_variants = _BUILD.interleave_base_and_variants
+make_base_triples = _BUILD.make_base_triples
 
 
 def make_row(id_: str, title: str, text: str | None = None) -> dict[str, str]:

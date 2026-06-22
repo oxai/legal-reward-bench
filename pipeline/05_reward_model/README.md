@@ -73,14 +73,12 @@ python pipeline/05_reward_model/train_dpo.py \
 |------|---------|-------------|
 | `--output-dir` | `outputs/sft_model` | Where to save the adapter |
 
-## Scoring policy (stage 04)
+## Pairing policy (stage 04)
 
-Responses are scored before pairing. For **answerable** triples the score sums:
-faithfulness (+4 fully / +2 partial / -2 unsupported / -4 contradicted),
-correctness (+4 correct / -4 incorrect),
-completeness (+2 complete / -1 incomplete),
-conciseness (+1 concise / -1 not_concise). Abstaining on an answerable triple scores -8.
+Stage 04 does not use scalar score gaps. It creates strict preferences by
+comparing responses within the same question/context-variant cell using the
+hierarchy from the paper: answer behavior, then faithfulness, then correctness,
+then completeness. Ties are discarded.
 
-For **unanswerable** triples abstaining scores +5; attempting scores -5.
-
-Only pairs with a score gap ≥ `--min-score-gap` (default 1.0) are kept.
+The resulting JSONL is directly consumable by DPO/SFT code because each record
+contains `prompt`, `chosen`, and `rejected`.
