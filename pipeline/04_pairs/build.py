@@ -159,6 +159,10 @@ def materialized_pair(
     metadata = triple.get("metadata", {})
     chosen_id = chosen_response["id"]
     rejected_id = rejected_response["id"]
+    preference_type = split_name(
+        answerability=metadata.get("answerability", "answerable"),
+        decisive_dimension=decisive_dimension,
+    )
 
     return {
         "id": f"{chosen_id}__preferred_to__{rejected_id}",
@@ -172,13 +176,11 @@ def materialized_pair(
         "prompt": prompt_template.format(context=triple["context"], question=triple["question"]),
         "chosen": chosen_response["response"],
         "rejected": rejected_response["response"],
-        "split": split_name(
-            answerability=metadata.get("answerability", "answerable"),
-            decisive_dimension=decisive_dimension,
-        ),
+        "split": preference_type,
         "metadata": {
             "policy_version": POLICY_VERSION,
             "decisive_dimension": decisive_dimension,
+            "preference_type": preference_type,
             "answerability": metadata.get("answerability", "answerable"),
             "context_variant": metadata.get("context_variant", "base"),
             "base_triple_id": metadata.get("base_triple_id", triple["id"]),

@@ -1,7 +1,11 @@
 """
-Improve Rilton training data by replacing 9-word template responses with
-length-balanced model-generated alternatives, eliminating the length-asymmetry
-artefact that swamped the original sum-log-probability metric.
+Build LegalRewardBench-v2 by replacing short template responses with
+length-balanced model-generated alternatives.
+
+This is a dataset transformation, not training or evaluation logic. It preserves
+the materialized DPO pair schema (`prompt`, `chosen`, `rejected`) while marking
+modified records in both the release-compatible `_modified` field and
+`metadata.length_augmentation`.
 
 Replacements:
   - refusal_answerable.rejected  : 9-word refusal template
@@ -13,24 +17,26 @@ Replacements:
   - completeness.rejected        : 3-word "No." style stub
         -> ~70-word but-incomplete answer (model gives partial reasoning)
 
-Other splits (faithfulness, correctness) are already length-balanced and pass
+Other preference types (faithfulness, correctness) are already length-balanced and pass
 through unchanged.
-
-Output: data/rilton/pairs_train_v2.jsonl  (940 pairs, same length as input)
-        data/rilton/pairs_dev_v2.jsonl    (124 pairs)
 """
 from __future__ import annotations
 
 import argparse
-import json
 import re
 from pathlib import Path
+from typing import Any
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from common.storage import read_jsonl, write_jsonl
+
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_ID = "mistralai/Ministral-8B-Instruct-2410"
+DEFAULT_DATASET = "lrb_v2"
+DEFAULT_DATASET_VERSION = "v2"
+LENGTH_AUGMENTATION_VERSION = "length_balanced_v1"
 
 HALLUCINATE_TEMPLATE = (
     "You are answering legal questions for a study on RAG faithfulness. "
@@ -73,12 +79,14 @@ def extract_question(prompt: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Create length-balanced LegalRewardBench-v2 pairs.")
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--limit", type=int, default=None, help="Cap pairs (debug only)")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
+    parser.add_argument("--dataset-version", default=DEFAULT_DATASET_VERSION)
     args = parser.parse_args()
 
     print(f"Loading {MODEL_ID}…", flush=True)
@@ -111,45 +119,77 @@ def main() -> None:
                 text = text[len(pref):].strip()
         return text or "(no generation)"
 
-    pairs = []
-    with args.input.open("r", encoding="utf-8") as f:
-        for line in f:
-            pairs.append(json.loads(line))
+    pairs = read_jsonl(args.input)
     if args.limit:
         pairs = pairs[: args.limit]
     print(f"Loaded {len(pairs)} pairs from {args.input}", flush=True)
 
-    stats = {"refusal_answerable_rej": 0, "refusal_unanswerable_cho": 0,
-             "completeness_rej": 0, "passthrough": 0}
+    stats = {
+        "rejected_to_hallucination": 0,
+        "chosen_to_elaborate_refusal": 0,
+        "rejected_to_incomplete": 0,
+        "passthrough": 0,
+    }
     out_records = []
     for i, r in enumerate(pairs):
         split = r.get("split", "")
         q = extract_question(r["prompt"])
         new_r = dict(r)
+        modification = "passthrough"
         if split == "refusal_answerable" and len(r["rejected"]) < 120:
             new_r["rejected"] = generate(HALLUCINATE_TEMPLATE.format(q=q))
-            new_r["_modified"] = "rejected_to_hallucination"
-            stats["refusal_answerable_rej"] += 1
+            modification = "rejected_to_hallucination"
+            stats[modification] += 1
         elif split == "refusal_unanswerable" and len(r["chosen"]) < 120:
             new_r["chosen"] = generate(ELABORATE_REFUSAL_TEMPLATE.format(q=q))
-            new_r["_modified"] = "chosen_to_elaborate_refusal"
-            stats["refusal_unanswerable_cho"] += 1
+            modification = "chosen_to_elaborate_refusal"
+            stats[modification] += 1
         elif split == "completeness" and len(r["rejected"]) < 30:
             new_r["rejected"] = generate(INCOMPLETE_TEMPLATE.format(q=q))
-            new_r["_modified"] = "rejected_to_incomplete"
-            stats["completeness_rej"] += 1
+            modification = "rejected_to_incomplete"
+            stats[modification] += 1
         else:
             stats["passthrough"] += 1
+        mark_augmentation(
+            new_r,
+            modification=modification,
+            dataset=args.dataset,
+            dataset_version=args.dataset_version,
+            max_new_tokens=args.max_new_tokens,
+        )
         out_records.append(new_r)
         if (i + 1) % 50 == 0:
             print(f"  {i+1}/{len(pairs)}  {stats}", flush=True)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("w", encoding="utf-8") as f:
-        for r in out_records:
-            f.write(json.dumps(r) + "\n")
-    print(f"Wrote {len(out_records)} pairs to {args.output}")
+    count = write_jsonl(args.output, out_records)
+    print(f"Wrote {count} pairs to {args.output}")
     print(f"Final stats: {stats}")
+
+
+def mark_augmentation(
+    record: dict[str, Any],
+    *,
+    modification: str,
+    dataset: str,
+    dataset_version: str,
+    max_new_tokens: int,
+) -> None:
+    if modification == "passthrough":
+        record.pop("_modified", None)
+    else:
+        record["_modified"] = modification
+
+    metadata = dict(record.get("metadata") or {})
+    metadata["dataset"] = dataset
+    metadata["dataset_version"] = dataset_version
+    metadata["length_augmentation"] = {
+        "version": LENGTH_AUGMENTATION_VERSION,
+        "modified": modification != "passthrough",
+        "modification": modification,
+        "model": MODEL_ID,
+        "max_new_tokens": max_new_tokens,
+    }
+    record["metadata"] = metadata
 
 
 if __name__ == "__main__":

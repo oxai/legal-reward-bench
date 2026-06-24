@@ -1,41 +1,59 @@
 # Eval
 
-Measures reward accuracy: given a preference pair, does the model assign higher log-probability to the chosen response than the rejected one? This is the standard cheap metric for DPO — no judge calls needed.
+Measures reward accuracy: given a preference pair, does the model assign higher
+log-probability to the chosen response than the rejected one?
 
 ## Commands
 
-Baseline (before DPO, on ContextualJudgeBench QA splits):
+LegalRewardBench-v2 evaluation uses the full-prompt val+test split and
+length-normalized scoring:
 
 ```bash
 uv run python pipeline/06_eval/eval_dpo.py \
-  --model Qwen/Qwen2.5-0.5B-Instruct \
-  --source contextual_judge_bench
+  --model outputs/ministral-8b-combined-v2 \
+  --base-model mistralai/Ministral-8B-Instruct-2410 \
+  --source pipeline \
+  --pairs data/lrb_v2/pairs_valtest.jsonl \
+  --output results/eval_lrb.csv \
+  --length-normalize \
+  --max-length 8192
 ```
 
-After DPO (LoRA adapter):
+ContextualJudgeBench evaluation keeps summed log probability for comparability
+with CJB-style sequence scoring:
 
 ```bash
 uv run python pipeline/06_eval/eval_dpo.py \
-  --model pipeline/05_reward_model/outputs/dpo_model \
-  --base-model Qwen/Qwen2.5-0.5B-Instruct \
-  --source contextual_judge_bench
+  --model outputs/ministral-8b-combined-v2 \
+  --base-model mistralai/Ministral-8B-Instruct-2410 \
+  --source pipeline \
+  --pairs data/cjb/cjb_test.jsonl \
+  --output results/eval_cjb.csv \
+  --max-length 4096
 ```
 
-Evaluate on our own pipeline pairs:
+Baseline model sanity check:
 
 ```bash
 uv run python pipeline/06_eval/eval_dpo.py \
-  --model pipeline/05_reward_model/outputs/dpo_model \
-  --base-model Qwen/Qwen2.5-0.5B-Instruct \
-  --pairs pipeline/04_pairs/outputs/pairs.jsonl
+  --model mistralai/Ministral-8B-Instruct-2410 \
+  --source pipeline \
+  --pairs data/lrb_v2/pairs_valtest.jsonl \
+  --length-normalize \
+  --max-length 8192 \
+  --limit 50
 ```
 
 Limit pairs for a quick sanity check:
 
 ```bash
 uv run python pipeline/06_eval/eval_dpo.py \
-  --model Qwen/Qwen2.5-0.5B-Instruct \
-  --source contextual_judge_bench \
+  --model outputs/ministral-8b-combined-v2 \
+  --base-model mistralai/Ministral-8B-Instruct-2410 \
+  --source pipeline \
+  --pairs data/lrb_v2/pairs_valtest.jsonl \
+  --length-normalize \
+  --max-length 8192 \
   --limit 50
 ```
 
@@ -62,5 +80,6 @@ refusal_unanswerable 250           0.6440
 | `--base-model` | — | Required when `--model` is a LoRA adapter |
 | `--source` | `pipeline` | `pipeline` or `contextual_judge_bench` |
 | `--splits` | all QA splits | Comma-separated CJB splits to evaluate |
-| `--max-length` | `1024` | Max tokens for prompt + completion |
+| `--max-length` | `4096` | Max tokens for prompt + completion |
 | `--limit` | — | Cap number of pairs (useful for quick checks) |
+| `--length-normalize` | off | Use mean per-token log-probability instead of summed log-probability |

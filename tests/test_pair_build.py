@@ -14,6 +14,10 @@ assert _BUILD_SPEC is not None and _BUILD_SPEC.loader is not None
 pair_build = importlib.util.module_from_spec(_BUILD_SPEC)
 _BUILD_SPEC.loader.exec_module(pair_build)
 
+_SPLIT_SPEC = importlib.util.spec_from_file_location("pair_split", PAIR_STAGE / "split.py")
+assert _SPLIT_SPEC is not None and _SPLIT_SPEC.loader is not None
+pair_split = importlib.util.module_from_spec(_SPLIT_SPEC)
+_SPLIT_SPEC.loader.exec_module(pair_split)
 
 def label(response_id: str, labels: dict[str, str]) -> dict:
     return {
@@ -138,7 +142,32 @@ class PairBuildTests(unittest.TestCase):
             [pair["split"] for pair in pairs],
             ["correctness", "refusal_answerable", "refusal_answerable", "refusal_unanswerable"],
         )
+        self.assertEqual(pairs[0]["metadata"]["preference_type"], "correctness")
 
+    def test_question_level_split_keeps_variants_together_and_marks_metadata(self) -> None:
+        records = [
+            {"id": "a", "triple_id": "q1__base", "split": "correctness", "metadata": {"base_triple_id": "q1"}},
+            {"id": "b", "triple_id": "q1__random", "split": "faithfulness", "metadata": {"base_triple_id": "q1"}},
+            {"id": "c", "triple_id": "q2__base", "split": "refusal_answerable", "metadata": {"base_triple_id": "q2"}},
+            {"id": "d", "triple_id": "q3__base", "split": "refusal_unanswerable", "metadata": {"base_triple_id": "q3"}},
+        ]
+        splits = pair_split.split_records(
+            records,
+            train_ratio=1 / 3,
+            dev_ratio=1 / 3,
+            seed=42,
+        )
+
+        all_split_records = [record for split_records in splits.values() for record in split_records]
+        q1_splits = {
+            record["metadata"]["dataset_split"]
+            for record in all_split_records
+            if record["metadata"]["base_triple_id"] == "q1"
+        }
+        self.assertEqual(len(q1_splits), 1)
+        self.assertEqual({record["id"] for record in all_split_records}, {"a", "b", "c", "d"})
+        self.assertEqual({record["metadata"]["dataset_split"] for record in all_split_records}, {"train", "dev", "test"})
+        self.assertEqual(next(record for record in all_split_records if record["id"] == "a")["metadata"]["preference_type"], "correctness")
 
 if __name__ == "__main__":
     unittest.main()
