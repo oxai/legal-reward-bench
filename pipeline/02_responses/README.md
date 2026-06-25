@@ -1,36 +1,20 @@
-# Responses
+# Stage 02: Responses
 
 Generates candidate answers from triples.
 
-Input:
+Input: `pipeline/01_triples/outputs/triples.jsonl`.
 
-```text
-pipeline/01_triples/outputs/*.jsonl
-```
+Output: `pipeline/02_responses/outputs/*.jsonl`.
 
-Output:
-
-```text
-outputs/<model>__<prompt_version>.jsonl
-```
-
-Paper generation command:
+Run one model:
 
 ```bash
-for model in \
-  digitalocean/alibaba-qwen3-32b \
-  digitalocean/deepseek-3.2 \
-  digitalocean/glm-5 \
-  digitalocean/mistral-3-14B
-do
-  uv run python pipeline/02_responses/generate.py \
-    --model "$model"
-done
+uv run python pipeline/02_responses/generate.py --model digitalocean/mistral-3-14B
 ```
 
-Generation uses deterministic decoding by default (`--temperature 0.0`) with the
-paper's `--max-tokens 8192` cap and `--concurrency 48`. For local Ollama smoke
-tests, use a local model and disable reasoning mode explicitly:
+Defaults: `--temperature 0.0`, `--max-tokens 8192`, `--concurrency 48`.
+
+Smoke test:
 
 ```bash
 uv run python pipeline/02_responses/generate.py \

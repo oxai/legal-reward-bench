@@ -1,36 +1,21 @@
-# Labels
+# Stage 03: Labels
 
-Labels candidate responses with a conditional judge:
+Labels generated responses with a structured judge.
 
-1. `answer_behavior`: `attempted`, `abstained`, or `unusable`
-2. For attempted answers, one focused judge call each for `faithfulness`,
-   `correctness`, and `completeness`
+Input: triples JSONL and response JSONL.
 
-Input:
+Output: `pipeline/03_labels/outputs/pointwise_labels__*.jsonl`.
 
-```text
-pipeline/02_responses/outputs/*.jsonl
-```
-
-Outputs:
-
-```text
-outputs/pointwise_labels__<rubric>__<judge>.jsonl
-outputs/metrics__*.csv
-```
-
-Paper labelling command:
+Run:
 
 ```bash
 uv run python pipeline/03_labels/build.py \
   --responses pipeline/02_responses/outputs/<responses>.jsonl
 ```
 
-The default judge is `digitalocean/openai-gpt-oss-120b`, decoded
-deterministically with the paper's `--max-tokens 2048` cap and
-`--concurrency 30`.
+Defaults: `digitalocean/openai-gpt-oss-120b`, `--max-tokens 2048`, `--concurrency 30`.
 
-Extract label metrics:
+Metrics:
 
 ```bash
 uv run python pipeline/03_labels/metrics.py \
