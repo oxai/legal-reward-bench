@@ -2,17 +2,22 @@
 
 This repository contains the full pipeline for training and evaluating contextual reward models for legal reasoning. The pipeline covers data construction, preference pair generation, DPO fine-tuning, and evaluation on legal benchmarks.
 
-Trained adapters are available at `VNoelDVT/legal-rm-adapters` (private HuggingFace repository).
+Released dataset artifacts are available at [`riltonfranzone/legal-reward-bench`](https://huggingface.co/datasets/riltonfranzone/legal-reward-bench).
 
 ---
 
 ## Setup
 
-Use `uv` to create and sync the local Python environment:
+Use `uv` to create and sync the locked Python environment:
 
 ```bash
-uv sync
+uv sync --locked
 ```
+
+The single dependency lock matches the training stack reported in the paper:
+`torch==2.4.1` (`2.4.1+cu124` on Linux x86_64 via the PyTorch CUDA 12.4
+index), `transformers==4.45.2`, `trl==0.11.4`, `peft==0.12.0`, and
+`accelerate==0.34.2`.
 
 Copy the environment template and fill in private credentials:
 
@@ -24,18 +29,6 @@ For local answer generation, make sure Ollama is running:
 
 ```bash
 brew services start ollama
-```
-
-For GPU training and evaluation, install the pinned dependencies directly:
-
-```bash
-pip install \
-    'transformers>=4.45.0,<4.46.0' \
-    'tokenizers>=0.20.0' \
-    'trl==0.11.4' \
-    'peft==0.12.0' \
-    'accelerate==0.34.2' \
-    datasets bitsandbytes
 ```
 
 The version pins are load-bearing: `trl==0.11.4` requires `transformers<4.46`.
@@ -92,13 +85,13 @@ Prepare the combined CJB+LRB-v2 training file:
 ```bash
 python3 pipeline/05_reward_model/prepare_training_data.py \
     --lrb-train data/lrb_v2/pairs_train.jsonl \
-    --output data/training/cjb_lrb_v2_train_dpo_2048.jsonl
+    --output data/training/cjb_lrb_v2_train_dpo.jsonl
 ```
 
 ```bash
 python3 pipeline/05_reward_model/train_dpo.py \
     --source pipeline \
-    --pairs data/training/cjb_lrb_v2_train_dpo_2048.jsonl \
+    --pairs data/training/cjb_lrb_v2_train_dpo.jsonl \
     --base-model mistralai/Ministral-8B-Instruct-2410 \
     --output-dir outputs/ministral-8b-combined-v2 \
     --max-length 2048 --batch-size 1 --grad-accum 16 \
@@ -142,29 +135,30 @@ Note: CJB uses sum log-probability (no `--length-normalize`). Using length-norma
 
 ### Download released artifacts
 
-The paper data release is hosted at `VNoelDVT/legal-rm-data`. The current HF
-release keeps legacy `data/rilton/` path names; the commands below copy those
-files into neutral local `data/lrb_v2/` paths used by this repository.
+The paper data release is hosted at
+[`riltonfranzone/legal-reward-bench`](https://huggingface.co/datasets/riltonfranzone/legal-reward-bench).
+The commands below copy the released files into the local paths expected by the
+pipeline commands in this repository.
 
 ```bash
-huggingface-cli download VNoelDVT/legal-rm-data \
+huggingface-cli download riltonfranzone/legal-reward-bench \
     --repo-type dataset \
-    --local-dir data/hf/legal-rm-data
+    --local-dir data/hf/legal-reward-bench
 
 mkdir -p data/lrb_v2 data/training data/cjb
 
-cp data/hf/legal-rm-data/data/rilton/pairs_train_v2.jsonl \
+cp data/hf/legal-reward-bench/data/legal_reward_bench_v2/train.jsonl \
    data/lrb_v2/pairs_train.jsonl
-cp data/hf/legal-rm-data/data/rilton/pairs_dev_v2.jsonl \
+cp data/hf/legal-reward-bench/data/legal_reward_bench_v2/dev.jsonl \
    data/lrb_v2/pairs_dev.jsonl
-cp data/hf/legal-rm-data/data/rilton/pairs_test_v2.jsonl \
+cp data/hf/legal-reward-bench/data/legal_reward_bench_v2/test.jsonl \
    data/lrb_v2/pairs_test.jsonl
-cp data/hf/legal-rm-data/data/rilton/pairs_valtest_v2.jsonl \
+cp data/hf/legal-reward-bench/data/legal_reward_bench_v2/valtest.jsonl \
    data/lrb_v2/pairs_valtest.jsonl
 
-cp data/hf/legal-rm-data/eval_outputs/model_sweep/combined_train_v2_truncated.jsonl \
-   data/training/cjb_lrb_v2_train_dpo_2048.jsonl
-cp data/hf/legal-rm-data/eval_outputs/model_sweep/cjb_test.jsonl \
+cp data/hf/legal-reward-bench/data/training/cjb_lrb_v2_train_dpo.jsonl \
+   data/training/cjb_lrb_v2_train_dpo.jsonl
+cp data/hf/legal-reward-bench/data/contextual_judge_bench/test.jsonl \
    data/cjb/cjb_test.jsonl
 ```
 
@@ -206,7 +200,7 @@ evaluation uses full prompts.
 ```bash
 python3 pipeline/05_reward_model/prepare_training_data.py \
     --lrb-train data/lrb_v2/pairs_train.jsonl \
-    --output data/training/cjb_lrb_v2_train_dpo_2048.jsonl
+    --output data/training/cjb_lrb_v2_train_dpo.jsonl
 ```
 
 ### Transfer benchmarks

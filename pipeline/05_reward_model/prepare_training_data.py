@@ -9,7 +9,7 @@ from sources.contextual_judge_bench import ALL_SPLITS, load_pairs
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LRB_TRAIN = ROOT / "data" / "lrb_v2" / "pairs_train.jsonl"
-DEFAULT_OUTPUT = ROOT / "data" / "training" / "cjb_lrb_v2_train_dpo_2048.jsonl"
+DEFAULT_OUTPUT = ROOT / "data" / "training" / "cjb_lrb_v2_train_dpo.jsonl"
 DEFAULT_PROMPT = ROOT / "pipeline" / "02_responses" / "prompts" / "generation_v1.txt"
 DEFAULT_LRB_MAX_CHARS = 3000
 

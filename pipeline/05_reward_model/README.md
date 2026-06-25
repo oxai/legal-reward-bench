@@ -18,7 +18,7 @@ ContextualJudgeBench training pairs.
 ```bash
 python pipeline/05_reward_model/prepare_training_data.py \
   --lrb-train data/lrb_v2/pairs_train.jsonl \
-  --output data/training/cjb_lrb_v2_train_dpo_2048.jsonl
+  --output data/training/cjb_lrb_v2_train_dpo.jsonl
 ```
 
 ### 1. DPO training for the paper run
@@ -26,7 +26,7 @@ python pipeline/05_reward_model/prepare_training_data.py \
 ```bash
 python pipeline/05_reward_model/train_dpo.py \
   --source pipeline \
-  --pairs data/training/cjb_lrb_v2_train_dpo_2048.jsonl \
+  --pairs data/training/cjb_lrb_v2_train_dpo.jsonl \
   --base-model mistralai/Ministral-8B-Instruct-2410 \
   --output-dir outputs/ministral-8b-combined-v2 \
   --max-length 2048 \
@@ -44,7 +44,7 @@ python pipeline/05_reward_model/train_dpo.py \
 ```bash
 python pipeline/05_reward_model/train_sft.py \
   --source pipeline \
-  --pairs data/training/cjb_lrb_v2_train_dpo_2048.jsonl \
+  --pairs data/training/cjb_lrb_v2_train_dpo.jsonl \
   --base-model mistralai/Ministral-8B-Instruct-2410 \
   --output-dir outputs/ministral-8b-sft \
   --max-length 2048 \
@@ -59,7 +59,7 @@ Then pass the saved SFT adapter to DPO:
 ```bash
 python pipeline/05_reward_model/train_dpo.py \
   --source pipeline \
-  --pairs data/training/cjb_lrb_v2_train_dpo_2048.jsonl \
+  --pairs data/training/cjb_lrb_v2_train_dpo.jsonl \
   --base-model mistralai/Ministral-8B-Instruct-2410 \
   --sft-model outputs/ministral-8b-sft \
   --output-dir outputs/ministral-8b-sft-dpo \
@@ -90,7 +90,7 @@ python pipeline/05_reward_model/train_dpo.py \
 ```bash
 python pipeline/05_reward_model/train_dpo.py \
   --source pipeline \
-  --pairs data/training/cjb_lrb_v2_train_dpo_2048.jsonl \
+  --pairs data/training/cjb_lrb_v2_train_dpo.jsonl \
   --limit 10 --epochs 1
 ```
 
