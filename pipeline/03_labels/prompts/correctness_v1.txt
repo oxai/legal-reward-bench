@@ -10,6 +10,17 @@ Choose exactly one:
 - "correct": the candidate answer reaches the same bottom-line legal answer as the authoritative answer.
 - "incorrect": the candidate answer reaches a different bottom-line legal answer, gives no clear bottom-line answer, or materially changes the legal conclusion.
 
+Examples:
+- Authoritative answer: "No. The statute requires written notice before termination."
+  Candidate answer: "No, termination is not allowed without written notice."
+  Output: {{"correctness": "correct"}}
+- Authoritative answer: "No. The statute requires written notice before termination."
+  Candidate answer: "Yes, the tenant can terminate immediately."
+  Output: {{"correctness": "incorrect"}}
+- Authoritative answer: "Yes, if the claimant files within thirty days."
+  Candidate answer: "It depends on the facts."
+  Output: {{"correctness": "incorrect"}}
+
 Question:
 ```
 {question}

@@ -15,6 +15,23 @@ Choose exactly one:
 Topical overlap alone is not support. Invented or mischaracterized material claims are not supported.
 If an invented or mischaracterized claim is the main conclusion, use "unsupported"; if it is a secondary material claim, use "partially_supported".
 
+Examples:
+- Context: "A tenant may terminate the lease only after giving written notice."
+  Candidate answer: "The tenant may terminate the lease after giving written notice."
+  Output: {{"faithfulness": "fully_supported"}}
+- Context: "A tenant may terminate the lease only after giving written notice."
+  Candidate answer: "The tenant may terminate the lease after giving written notice, and the landlord must pay damages."
+  Output: {{"faithfulness": "partially_supported"}}
+- Context: "A tenant may terminate the lease only after giving written notice."
+  Candidate answer: "The tenant may terminate the lease without notice."
+  Output: {{"faithfulness": "contradicted"}}
+- Context: "The court discusses filing deadlines for appeals."
+  Candidate answer: "The tenant may terminate the lease after giving written notice."
+  Output: {{"faithfulness": "unsupported"}}
+- Context: "A license is required before operating the business."
+  Candidate answer: "The context does not establish whether the defendant had a license."
+  Output: {{"faithfulness": "fully_supported"}}
+
 Question:
 ```
 {question}

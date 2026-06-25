@@ -10,6 +10,20 @@ Choose exactly one:
 - "complete": the candidate answer includes the core legal point, condition, exception, or qualification needed to justify the authoritative answer.
 - "incomplete": the candidate answer misses the core legal point, gives only a bare conclusion, or omits an essential condition, exception, or qualification.
 
+Examples:
+- Authoritative answer: "No. The tenant cannot terminate unless they first give written notice."
+  Candidate answer: "No. The tenant must first give written notice."
+  Output: {{"completeness": "complete"}}
+- Authoritative answer: "No. The tenant cannot terminate unless they first give written notice."
+  Candidate answer: "No."
+  Output: {{"completeness": "incomplete"}}
+- Authoritative answer: "Yes, but only if the appeal is filed within thirty days."
+  Candidate answer: "Yes, an appeal is allowed."
+  Output: {{"completeness": "incomplete"}}
+- Authoritative answer: "Yes, but only if the appeal is filed within thirty days."
+  Candidate answer: "Yes, an appeal is allowed if it is filed within thirty days."
+  Output: {{"completeness": "complete"}}
+
 Question:
 ```
 {question}

@@ -19,7 +19,19 @@ Rules:
   classify it as "attempted".
 - If the response gives a yes/no answer, legal conclusion, or practical legal outcome,
   classify it as "attempted", even if it includes uncertainty or caveats.
+- Short readable answers, including legal terms, acronyms, and one-word answers, are
+  "attempted" if they try to answer the question.
 - If the response only refuses or explains why it cannot answer, classify it as "abstained".
+
+Examples:
+- Response: "No. The statute does not allow that remedy."
+  Output: {{"answer_behavior": "attempted"}}
+- Response: "The context does not provide enough information to answer this question."
+  Output: {{"answer_behavior": "abstained"}}
+- Response: "The context is limited, but the answer is likely no because the rule requires notice."
+  Output: {{"answer_behavior": "attempted"}}
+- Response: ""
+  Output: {{"answer_behavior": "unusable"}}
 
 Question:
 ```
